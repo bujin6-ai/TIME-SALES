@@ -237,10 +237,13 @@ let cfgSha = null;                            // config.json 현재 sha
 const conn = loadConn();                      // 이 기기 연결정보
 const objectUrls = [];
 
+// 기본 저장소 — 어떤 기기에서 열어도 자동 연결(열람)되도록 미리 지정
+const DEFAULT_OWNER = "bujin6-ai";
+const DEFAULT_REPO = "TIME-SALES";
 function loadConn() {
   return {
-    owner: localStorage.getItem("ps_owner") || "",
-    repo: localStorage.getItem("ps_repo") || "",
+    owner: localStorage.getItem("ps_owner") || DEFAULT_OWNER,
+    repo: localStorage.getItem("ps_repo") || DEFAULT_REPO,
     branch: localStorage.getItem("ps_branch") || "main",
     token: localStorage.getItem("ps_token") || "",
   };
