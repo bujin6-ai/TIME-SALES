@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>일자별 사진 공유</title>
+<style>
+  :root {
+    --bg: #0f1220;
+    --card: #1b1f31;
+    --card2: #232841;
+    --line: #2e3454;
+    --text: #eef1ff;
+    --muted: #9aa3c7;
+    --accent: #5b7cfa;
+    --accent2: #4c6ef5;
+    --danger: #ff5d6c;
+    --ok: #2fcf8f;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", system-ui, sans-serif; }
+  body { padding-bottom: 90px; }
+  header {
+    position: sticky; top: 0; z-index: 30; background: rgba(15,18,32,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 12px 16px calc(12px + env(safe-area-inset-top));
+    padding-top: max(12px, env(safe-area-inset-top));
+  }
+  .titlebar { display: flex; align-items: center; gap: 10px; }
+  .titlebar h1 { font-size: 18px; margin: 0; flex: 1; }
+  .iconbtn { background: var(--card2); border: 1px solid var(--line); color: var(--text);
+    width: 40px; height: 40px; border-radius: 12px; font-size: 18px; cursor: pointer; display: grid; place-items: center; }
+  .iconbtn:active { transform: scale(.95); }
+  .daterow { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+  .daterow input[type=date] {
+    flex: 1; background: var(--card2); border: 1px solid var(--line); color: var(--text);
+    padding: 11px 12px; border-radius: 12px; font-size: 16px; }
+  .navbtn { background: var(--card2); border: 1px solid var(--line); color: var(--text);
+    padding: 0 14px; height: 44px; border-radius: 12px; font-size: 18px; cursor: pointer; }
+  .todaybtn { background: var(--accent2); border: none; color: #fff; padding: 0 14px; height: 44px;
+    border-radius: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  main { padding: 16px; max-width: 920px; margin: 0 auto; }
+  .status { color: var(--muted); font-size: 13px; padding: 8px 2px 14px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+  .photo { background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; }
+  .photo .imgwrap { aspect-ratio: 1/1; background: #0a0d18; display: grid; place-items: center; cursor: pointer; }
+  .photo img { width: 100%; height: 100%; object-fit: cover; }
+  .photo .meta { padding: 8px 10px; font-size: 12px; }
+  .photo .who { font-weight: 700; }
+  .photo .time { color: var(--muted); }
+  .photo .memo { color: var(--muted); margin-top: 3px; word-break: break-all; }
+  .photo .row { display: flex; gap: 6px; padding: 0 10px 10px; }
+  .photo .row button { flex: 1; background: var(--card2); border: 1px solid var(--line); color: var(--text);
+    padding: 8px; border-radius: 9px; font-size: 12px; cursor: pointer; }
+  .photo .row button.del { color: var(--danger); }
+  .empty { text-align: center; color: var(--muted); padding: 60px 20px; }
+  .empty .big { font-size: 44px; }
+  .fab { position: fixed; right: 18px; bottom: calc(18px + env(safe-area-inset-bottom)); z-index: 40;
+    background: var(--accent); color: #fff; border: none; width: 60px; height: 60px; border-radius: 20px;
+    font-size: 30px; box-shadow: 0 10px 26px rgba(91,124,250,.45); cursor: pointer; }
+  .fab:active { transform: scale(.94); }
+
+  /* modal */
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 50; display: none;
+    align-items: flex-end; justify-content: center; }
+  .overlay.show { display: flex; }
+  .sheet { background: var(--card); width: 100%; max-width: 560px; border-radius: 20px 20px 0 0;
+    border: 1px solid var(--line); border-bottom: none; padding: 18px 18px calc(24px + env(safe-area-inset-bottom));
+    max-height: 92vh; overflow-y: auto; }
+  @media (min-width: 600px) { .overlay { align-items: center; } .sheet { border-radius: 20px; border-bottom: 1px solid var(--line); } }
+  .sheet h2 { margin: 4px 0 16px; font-size: 18px; }
+  label.fld { display: block; font-size: 13px; color: var(--muted); margin: 14px 0 6px; }
+  select, input[type=text], input[type=email], textarea, input[type=password] {
+    width: 100%; background: var(--card2); border: 1px solid var(--line); color: var(--text);
+    padding: 12px; border-radius: 11px; font-size: 16px; }
+  textarea { resize: vertical; min-height: 56px; }
+  .btn { width: 100%; background: var(--accent); border: none; color: #fff; padding: 14px;
+    border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer; margin-top: 18px; }
+  .btn:disabled { opacity: .5; }
+  .btn.sec { background: var(--card2); border: 1px solid var(--line); }
+  .btn.ghost { background: transparent; color: var(--muted); margin-top: 8px; }
+  .tagrow { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .tag { background: var(--card2); border: 1px solid var(--line); border-radius: 20px; padding: 6px 10px 6px 12px;
+    font-size: 13px; display: flex; align-items: center; gap: 6px; }
+  .tag b { font-weight: 600; }
+  .tag .x { color: var(--danger); cursor: pointer; font-weight: 700; }
+  .addrow { display: flex; gap: 8px; margin-top: 8px; }
+  .addrow input { flex: 1; }
+  .addrow button { background: var(--accent2); border: none; color: #fff; padding: 0 16px; border-radius: 11px; cursor: pointer; }
+  .hint { font-size: 12px; color: var(--muted); line-height: 1.5; margin-top: 6px; }
+  .hint a { color: var(--accent); }
+  .toast { position: fixed; left: 50%; bottom: 100px; transform: translateX(-50%); z-index: 80;
+    background: #000; color: #fff; padding: 11px 18px; border-radius: 30px; font-size: 14px; opacity: 0;
+    transition: opacity .25s; pointer-events: none; max-width: 90%; text-align: center; }
+  .toast.show { opacity: .95; }
+  .divider { height: 1px; background: var(--line); margin: 20px 0; }
+
+  /* viewer */
+  .viewer { position: fixed; inset: 0; background: rgba(0,0,0,.94); z-index: 60; display: none; flex-direction: column; }
+  .viewer.show { display: flex; }
+  .viewer .vtop { display: flex; justify-content: flex-end; gap: 10px; padding: 14px; padding-top: max(14px, env(safe-area-inset-top)); }
+  .viewer .vtop button { background: rgba(255,255,255,.12); color: #fff; border: none; padding: 10px 16px; border-radius: 12px; font-size: 15px; cursor: pointer; }
+  .viewer .vbody { flex: 1; display: grid; place-items: center; overflow: auto; padding: 10px; }
+  .viewer img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .spin { width: 26px; height: 26px; border: 3px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: r 1s linear infinite; }
+  @keyframes r { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="titlebar">
+    <h1>📸 일자별 사진 공유</h1>
+    <button class="iconbtn" id="btnRefresh" title="새로고침">⟳</button>
+    <button class="iconbtn" id="btnSettings" title="설정">⚙️</button>
+  </div>
+  <div class="daterow">
+    <button class="navbtn" id="btnPrev">‹</button>
+    <input type="date" id="datePicker" />
+    <button class="navbtn" id="btnNext">›</button>
+    <button class="todaybtn" id="btnToday">오늘</button>
+  </div>
+</header>
+
+<main>
+  <div class="status" id="status">불러오는 중…</div>
+  <div class="grid" id="grid"></div>
+</main>
+
+<button class="fab" id="btnUpload">＋</button>
+
+<!-- 업로드 시트 -->
+<div class="overlay" id="uploadOverlay">
+  <div class="sheet">
+    <h2>사진 업로드</h2>
+    <label class="fld">날짜</label>
+    <input type="date" id="upDate" />
+    <label class="fld">담당자</label>
+    <select id="upMember"></select>
+    <label class="fld">메모 (선택)</label>
+    <input type="text" id="upMemo" placeholder="예: 오전 점검, 매장 진열 등" />
+    <label class="fld">사진 / 캡쳐 선택 (여러 장 가능)</label>
+    <input type="file" id="upFile" accept="image/*" multiple />
+    <button class="btn" id="btnDoUpload">업로드</button>
+    <button class="btn ghost" id="btnCancelUpload">취소</button>
+  </div>
+</div>
+
+<!-- 설정 시트 -->
+<div class="overlay" id="settingsOverlay">
+  <div class="sheet">
+    <h2>⚙️ 설정</h2>
+
+    <label class="fld">GitHub 저장소 소유자 (owner)</label>
+    <input type="text" id="cfgOwner" placeholder="예: hong-gildong" />
+    <label class="fld">저장소 이름 (repository)</label>
+    <input type="text" id="cfgRepo" placeholder="예: photo-share" />
+    <label class="fld">브랜치</label>
+    <input type="text" id="cfgBranch" placeholder="main" />
+    <label class="fld">액세스 토큰 (등록/수정 시 필요)</label>
+    <input type="password" id="cfgToken" placeholder="github_pat_..." />
+    <div class="hint">
+      토큰은 이 기기에만 저장됩니다(서버 전송 없음). 열람만 할 사람은 토큰 없이도 됩니다(공개 저장소).
+      <br>토큰 발급: GitHub → Settings → Developer settings → Fine-grained tokens →
+      해당 저장소에 <b>Contents: Read and write</b> 권한.
+    </div>
+    <button class="btn sec" id="btnSaveLocal">이 기기 연결정보 저장</button>
+
+    <div class="divider"></div>
+
+    <label class="fld">담당자 이름 목록</label>
+    <div class="tagrow" id="memberTags"></div>
+    <div class="addrow">
+      <input type="text" id="newMember" placeholder="이름 추가" />
+      <button id="btnAddMember">추가</button>
+    </div>
+
+    <label class="fld" style="margin-top:18px;">알림 수신 이메일</label>
+    <div class="tagrow" id="emailTags"></div>
+    <div class="addrow">
+      <input type="email" id="newEmail" placeholder="email@example.com" />
+      <button id="btnAddEmail">추가</button>
+    </div>
+    <div class="hint">담당자/이메일 목록은 저장소의 <b>config.json</b>에 저장되어 모두에게 공유됩니다.</div>
+
+    <button class="btn" id="btnSaveConfig">목록 저장 (모두에게 공유)</button>
+    <button class="btn ghost" id="btnCloseSettings">닫기</button>
+  </div>
+</div>
+
+<!-- 뷰어 -->
+<div class="viewer" id="viewer">
+  <div class="vtop">
+    <button id="btnViewerDownload">⬇ 다운로드</button>
+    <button id="btnViewerClose">✕ 닫기</button>
+  </div>
+  <div class="vbody" id="viewerBody"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = "https://api.github.com";
+const SEP = "__";
+let cfg = { members: [], recipients: [] };   // 저장소 공유 설정
+let cfgSha = null;                            // config.json 현재 sha
+const conn = loadConn();                      // 이 기기 연결정보
+const objectUrls = [];
+
+function loadConn() {
+  return {
+    owner: localStorage.getItem("ps_owner") || "",
+    repo: localStorage.getItem("ps_repo") || "",
+    branch: localStorage.getItem("ps_branch") || "main",
+    token: localStorage.getItem("ps_token") || "",
+  };
+}
+function saveConn() {
+  localStorage.setItem("ps_owner", conn.owner);
+  localStorage.setItem("ps_repo", conn.repo);
+  localStorage.setItem("ps_branch", conn.branch || "main");
+  localStorage.setItem("ps_token", conn.token);
+}
+function configured() { return conn.owner && conn.repo; }
+
+function headers(extra) {
+  const h = Object.assign({ "Accept": "application/vnd.github+json" }, extra || {});
+  if (conn.token) h["Authorization"] = "Bearer " + conn.token;
+  return h;
+}
+function toast(msg, ms) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove("show"), ms || 2500);
+}
+function todayStr() {
+  const d = new Date(); const off = d.getTimezoneOffset();
+  return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
+}
+function pad(n) { return String(n).padStart(2, "0"); }
+
+// ---------- base64 (UTF-8 안전) ----------
+function utf8ToB64(str) { return btoa(unescape(encodeURIComponent(str))); }
+function b64ToUtf8(b64) { return decodeURIComponent(escape(atob(b64.replace(/\n/g, "")))); }
+
+// ---------- config.json ----------
+async function loadConfig() {
+  if (!configured()) return;
+  try {
+    const r = await fetch(`${API}/repos/${conn.owner}/${conn.repo}/contents/config.json?ref=${conn.branch}`, { headers: headers() });
+    if (r.status === 404) { cfg = { members: [], recipients: [] }; cfgSha = null; return; }
+    if (!r.ok) throw new Error("config 로드 실패 (" + r.status + ")");
+    const j = await r.json();
+    cfgSha = j.sha;
+    const parsed = JSON.parse(b64ToUtf8(j.content));
+    cfg.members = parsed.members || [];
+    cfg.recipients = parsed.recipients || [];
+  } catch (e) { console.warn(e); }
+}
+async function saveConfig() {
+  if (!configured()) { toast("먼저 저장소 정보를 입력하세요"); return; }
+  if (!conn.token) { toast("저장하려면 토큰이 필요합니다"); return; }
+  const body = {
+    message: "설정 업데이트 (담당자/수신자)",
+    content: utf8ToB64(JSON.stringify({ members: cfg.members, recipients: cfg.recipients }, null, 2)),
+    branch: conn.branch,
+  };
+  if (cfgSha) body.sha = cfgSha;
+  const r = await fetch(`${API}/repos/${conn.owner}/${conn.repo}/contents/config.json`,
+    { method: "PUT", headers: headers({ "Content-Type": "application/json" }), body: JSON.stringify(body) });
+  if (!r.ok) { const t = await r.text(); throw new Error("설정 저장 실패: " + t); }
+  const j = await r.json(); cfgSha = j.content.sha;
+}
+
+// ---------- 사진 목록 ----------
+function parseName(filename) {
+  // HHMMSS__uploader__memo__original.ext
+  const dot = filename.lastIndexOf(".");
+  const ext = dot >= 0 ? filename.slice(dot) : "";
+  const base = dot >= 0 ? filename.slice(0, dot) : filename;
+  const parts = base.split(SEP);
+  const time = parts[0] || "";
+  const uploader = parts[1] ? decodeURIComponent(parts[1]) : "(미상)";
+  const memo = parts[2] ? decodeURIComponent(parts[2]) : "";
+  const hhmm = time.length >= 4 ? `${time.slice(0,2)}:${time.slice(2,4)}` : "";
+  return { uploader, memo, hhmm, ext };
+}
+async function listPhotos(date) {
+  const r = await fetch(`${API}/repos/${conn.owner}/${conn.repo}/contents/photos/${date}?ref=${conn.branch}`, { headers: headers() });
+  if (r.status === 404) return [];
+  if (!r.ok) throw new Error("목록 로드 실패 (" + r.status + ")");
+  const arr = await r.json();
+  return arr.filter(x => x.type === "file" && /\.(jpe?g|png|gif|webp|heic|bmp)$/i.test(x.name))
+            .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+async function fetchBlobUrl(item) {
+  // 비공개 저장소 지원: 토큰 있으면 인증 fetch, 없으면 download_url 직접
+  if (conn.token) {
+    const r = await fetch(`${API}/repos/${conn.owner}/${conn.repo}/contents/${item.path}?ref=${conn.branch}`,
+      { headers: headers({ "Accept": "application/vnd.github.raw" }) });
+    if (!r.ok) throw new Error("이미지 로드 실패");
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob); objectUrls.push(url); return url;
+  }
+  return item.download_url;
+}
+
+// ---------- 렌더 ----------
+async function render() {
+  const grid = document.getElementById("grid");
+  const status = document.getElementById("status");
+  objectUrls.forEach(URL.revokeObjectURL); objectUrls.length = 0;
+  grid.innerHTML = "";
+
+  if (!configured()) {
+    status.textContent = "";
+    grid.innerHTML = `<div class="empty"><div class="big">⚙️</div><p>먼저 ⚙️ 설정에서 GitHub 저장소를 연결하세요.</p></div>`;
+    return;
+  }
+  const date = document.getElementById("datePicker").value;
+  status.textContent = "불러오는 중…";
+  let photos;
+  try { photos = await listPhotos(date); }
+  catch (e) { status.textContent = "⚠️ " + e.message; return; }
+
+  if (!photos.length) {
+    status.textContent = `${date} · 사진 0장`;
+    grid.innerHTML = `<div class="empty"><div class="big">🗓️</div><p>이 날짜에 등록된 사진이 없습니다.<br>＋ 버튼으로 추가하세요.</p></div>`;
+    return;
+  }
+  status.textContent = `${date} · 사진 ${photos.length}장`;
+
+  for (const p of photos) {
+    const meta = parseName(p.name);
+    const card = document.createElement("div");
+    card.className = "photo";
+    card.innerHTML = `
+      <div class="imgwrap"><div class="spin"></div></div>
+      <div class="meta">
+        <div class="who">${escapeHtml(meta.uploader)}</div>
+        <div class="time">${meta.hhmm}</div>
+        ${meta.memo ? `<div class="memo">${escapeHtml(meta.memo)}</div>` : ""}
+      </div>
+      <div class="row">
+        <button class="dl">⬇ 다운로드</button>
+        ${conn.token ? `<button class="del">삭제</button>` : ""}
+      </div>`;
+    grid.appendChild(card);
+
+    fetchBlobUrl(p).then(url => {
+      const wrap = card.querySelector(".imgwrap");
+      wrap.innerHTML = `<img src="${url}" alt="${escapeHtml(p.name)}" />`;
+      wrap.onclick = () => openViewer(url, p);
+    }).catch(() => { card.querySelector(".imgwrap").innerHTML = "❌"; });
+
+    card.querySelector(".dl").onclick = () => downloadPhoto(p);
+    const del = card.querySelector(".del");
+    if (del) del.onclick = () => deletePhoto(p);
+  }
+}
+function escapeHtml(s) { return s.replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c])); }
+
+// ---------- 다운로드 (모바일 포함) ----------
+async function downloadPhoto(item) {
+  try {
+    toast("다운로드 준비 중…");
+    let url;
+    if (conn.token) {
+      const r = await fetch(`${API}/repos/${conn.owner}/${conn.repo}/contents/${item.path}?ref=${conn.branch}`,
+        { headers: headers({ "Accept": "application/vnd.github.raw" }) });
+      const blob = await r.blob(); url = URL.createObjectURL(blob);
+    } else {
+      const r = await fetch(item.download_url); const blob = await r.blob(); url = URL.createObjectURL(blob);
+    }
+    const a = document.createElement("a");
+    a.href = url; a.download = item.name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  } catch (e) { toast("다운로드 실패"); console.error(e); }
+}
+
+// ---------- 삭제 ----------
+async function deletePhoto(item) {
+  if (!confirm(`삭제하시겠습니까?\n${item.name}`)) return;
+  try {
+    const r = await fetch(`${API}/repos/${conn.owner}/${conn.repo}/contents/${item.path}`,
+      { method: "DELETE", headers: headers({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ message: "사진 삭제: " + item.name, sha: item.sha, branch: conn.branch }) });
+    if (!r.ok) throw new Error(await r.text());
+    toast("삭제됨"); render();
+  } catch (e) { toast("삭제 실패"); console.error(e); }
+}
+
+// ---------- 업로드 ----------
+function fileToB64(file) {
+  return new Promise((res, rej) => {
+    const fr = new FileReader();
+    fr.onload = () => res(fr.result.split(",")[1]);
+    fr.onerror = rej; fr.readAsDataURL(file);
+  });
+}
+async function doUpload() {
+  if (!conn.token) { toast("업로드하려면 토큰이 필요합니다 (설정)"); return; }
+  const date = document.getElementById("upDate").value;
+  const member = document.getElementById("upMember").value;
+  const memo = document.getElementById("upMemo").value.trim();
+  const files = document.getElementById("upFile").files;
+  if (!member) { toast("담당자를 선택하세요"); return; }
+  if (!files.length) { toast("사진을 선택하세요"); return; }
+
+  const btn = document.getElementById("btnDoUpload");
+  btn.disabled = true;
+  try {
+    let i = 0;
+    for (const file of files) {
+      i++;
+      btn.textContent = `업로드 중… (${i}/${files.length})`;
+      const now = new Date();
+      const time = pad(now.getHours()) + pad(now.getMinutes()) + pad(now.getSeconds()) + pad(i);
+      const extMatch = file.name.match(/\.[a-z0-9]+$/i);
+      const ext = extMatch ? extMatch[0].toLowerCase() : ".jpg";
+      const orig = file.name.replace(/\.[a-z0-9]+$/i, "").replace(/[^\w가-힣-]/g, "");
+      const fname = [time, encodeURIComponent(member), encodeURIComponent(memo), encodeURIComponent(orig)].join(SEP) + ext;
+      const path = `photos/${date}/${fname}`;
+      const content = await fileToB64(file);
+      const r = await fetch(`${API}/repos/${conn.owner}/${conn.repo}/contents/${path}`,
+        { method: "PUT", headers: headers({ "Content-Type": "application/json" }),
+          body: JSON.stringify({ message: `사진 업로드: ${member} ${date}`, content, branch: conn.branch }) });
+      if (!r.ok) throw new Error(await r.text());
+    }
+    toast("업로드 완료! 이메일 알림이 발송됩니다.");
+    closeOverlay("uploadOverlay");
+    document.getElementById("datePicker").value = date;
+    render();
+  } catch (e) { toast("업로드 실패"); console.error(e); }
+  finally { btn.disabled = false; btn.textContent = "업로드"; }
+}
+
+// ---------- 뷰어 ----------
+function openViewer(url, item) {
+  const v = document.getElementById("viewer");
+  document.getElementById("viewerBody").innerHTML = `<img src="${url}" />`;
+  document.getElementById("btnViewerDownload").onclick = () => downloadPhoto(item);
+  v.classList.add("show");
+}
+
+// ---------- 설정 UI ----------
+function renderTags() {
+  const mt = document.getElementById("memberTags");
+  mt.innerHTML = "";
+  cfg.members.forEach((m, idx) => {
+    const el = document.createElement("div"); el.className = "tag";
+    el.innerHTML = `<b>${escapeHtml(m)}</b> <span class="x">✕</span>`;
+    el.querySelector(".x").onclick = () => { cfg.members.splice(idx, 1); renderTags(); };
+    mt.appendChild(el);
+  });
+  const et = document.getElementById("emailTags");
+  et.innerHTML = "";
+  cfg.recipients.forEach((m, idx) => {
+    const el = document.createElement("div"); el.className = "tag";
+    el.innerHTML = `<b>${escapeHtml(m)}</b> <span class="x">✕</span>`;
+    el.querySelector(".x").onclick = () => { cfg.recipients.splice(idx, 1); renderTags(); };
+    et.appendChild(el);
+  });
+}
+function fillMemberSelect() {
+  const sel = document.getElementById("upMember");
+  sel.innerHTML = cfg.members.length
+    ? cfg.members.map(m => `<option>${escapeHtml(m)}</option>`).join("")
+    : `<option value="">설정에서 담당자를 먼저 추가하세요</option>`;
+}
+
+// ---------- 오버레이 ----------
+function openOverlay(id) { document.getElementById(id).classList.add("show"); }
+function closeOverlay(id) { document.getElementById(id).classList.remove("show"); }
+
+// ---------- 이벤트 ----------
+function shiftDate(days) {
+  const dp = document.getElementById("datePicker");
+  const d = new Date(dp.value + "T00:00:00");
+  d.setDate(d.getDate() + days);
+  dp.value = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  render();
+}
+
+document.getElementById("datePicker").value = todayStr();
+document.getElementById("upDate").value = todayStr();
+
+document.getElementById("btnPrev").onclick = () => shiftDate(-1);
+document.getElementById("btnNext").onclick = () => shiftDate(1);
+document.getElementById("btnToday").onclick = () => { document.getElementById("datePicker").value = todayStr(); render(); };
+document.getElementById("datePicker").onchange = render;
+document.getElementById("btnRefresh").onclick = async () => { await loadConfig(); fillMemberSelect(); render(); };
+
+document.getElementById("btnUpload").onclick = () => {
+  if (!configured()) { toast("먼저 설정에서 저장소를 연결하세요"); openSettings(); return; }
+  document.getElementById("upDate").value = document.getElementById("datePicker").value;
+  fillMemberSelect();
+  openOverlay("uploadOverlay");
+};
+document.getElementById("btnCancelUpload").onclick = () => closeOverlay("uploadOverlay");
+document.getElementById("btnDoUpload").onclick = doUpload;
+
+document.getElementById("btnViewerClose").onclick = () => document.getElementById("viewer").classList.remove("show");
+
+function openSettings() {
+  document.getElementById("cfgOwner").value = conn.owner;
+  document.getElementById("cfgRepo").value = conn.repo;
+  document.getElementById("cfgBranch").value = conn.branch || "main";
+  document.getElementById("cfgToken").value = conn.token;
+  renderTags();
+  openOverlay("settingsOverlay");
+}
+document.getElementById("btnSettings").onclick = openSettings;
+document.getElementById("btnCloseSettings").onclick = () => closeOverlay("settingsOverlay");
+
+document.getElementById("btnSaveLocal").onclick = async () => {
+  conn.owner = document.getElementById("cfgOwner").value.trim();
+  conn.repo = document.getElementById("cfgRepo").value.trim();
+  conn.branch = document.getElementById("cfgBranch").value.trim() || "main";
+  conn.token = document.getElementById("cfgToken").value.trim();
+  saveConn();
+  toast("연결정보 저장됨");
+  await loadConfig(); renderTags(); fillMemberSelect(); render();
+};
+
+document.getElementById("btnAddMember").onclick = () => {
+  const v = document.getElementById("newMember").value.trim();
+  if (v && !cfg.members.includes(v)) cfg.members.push(v);
+  document.getElementById("newMember").value = ""; renderTags();
+};
+document.getElementById("newMember").addEventListener("keydown", e => { if (e.key === "Enter") document.getElementById("btnAddMember").click(); });
+
+document.getElementById("btnAddEmail").onclick = () => {
+  const v = document.getElementById("newEmail").value.trim();
+  if (v && /\S+@\S+\.\S+/.test(v) && !cfg.recipients.includes(v)) cfg.recipients.push(v);
+  else if (v) { toast("이메일 형식을 확인하세요"); return; }
+  document.getElementById("newEmail").value = ""; renderTags();
+};
+document.getElementById("newEmail").addEventListener("keydown", e => { if (e.key === "Enter") document.getElementById("btnAddEmail").click(); });
+
+document.getElementById("btnSaveConfig").onclick = async () => {
+  try { await saveConfig(); fillMemberSelect(); toast("목록 저장 완료 (공유됨)"); }
+  catch (e) { toast("저장 실패 — 토큰/권한 확인"); console.error(e); }
+};
+
+// ---------- 시작 ----------
+(async function init() {
+  if (configured()) { await loadConfig(); fillMemberSelect(); }
+  render();
+})();
+</script>
+</body>
+</html>
