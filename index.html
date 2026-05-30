@@ -116,6 +116,7 @@
   .viewer .vtop { display: flex; justify-content: flex-end; gap: 10px; padding: 14px; padding-top: max(14px, env(safe-area-inset-top)); }
   .viewer .vtop button { background: rgba(255,255,255,.12); color: #fff; border: none; padding: 10px 16px; border-radius: 12px; font-size: 15px; cursor: pointer; }
   .viewer .vtop .zb { padding: 10px 15px; font-size: 18px; font-weight: 700; min-width: 46px; }
+  .viewer .vtop .zpct { color: #fff; align-self: center; margin-right: auto; padding: 0 6px; font-size: 14px; font-variant-numeric: tabular-nums; }
   .viewer .vbody { flex: 1; display: grid; place-items: center; overflow: hidden; padding: 10px; touch-action: none; }
   .viewer img { max-width: 100%; max-height: 100%; object-fit: contain; will-change: transform; user-select: none; -webkit-user-drag: none; }
   .spin { width: 26px; height: 26px; border: 3px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: r 1s linear infinite; }
@@ -215,6 +216,7 @@
 <!-- 뷰어 -->
 <div class="viewer" id="viewer">
   <div class="vtop">
+    <span id="zoomPct" class="zpct">100%</span>
     <button class="zb" id="btnZoomOut">－</button>
     <button class="zb" id="btnZoomIn">＋</button>
     <button class="zb" id="btnZoomReset">원본</button>
@@ -520,6 +522,8 @@ function setupViewerZoom() {
     z.img.style.transition = anim ? "transform .15s ease" : "none";
     z.img.style.transform = `translate(${z.tx}px, ${z.ty}px) scale(${z.scale})`;
     z.img.style.cursor = z.scale > 1 ? "grab" : "default";
+    const pct = document.getElementById("zoomPct");
+    if (pct) pct.textContent = Math.round(z.scale * 100) + "%";
   }
   function zoomTo(ns, fx, fy, anim) {
     if (!z.img) return;
@@ -541,7 +545,7 @@ function setupViewerZoom() {
 
   body.addEventListener("pointerdown", e => {
     if (!z.img) return;
-    body.setPointerCapture(e.pointerId);
+    try { body.setPointerCapture(e.pointerId); } catch (_) {}
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pointers.size === 2) {
       const p = [...pointers.values()];
@@ -577,6 +581,7 @@ function openViewer(url, item) {
   const img = document.getElementById("viewerImg");
   viewerZoom.img = img; viewerZoom.scale = 1; viewerZoom.tx = 0; viewerZoom.ty = 0;
   img.style.transform = "";
+  document.getElementById("zoomPct").textContent = "100%";
   const measure = () => { viewerZoom.baseW = img.offsetWidth; viewerZoom.baseH = img.offsetHeight; };
   if (img.complete && img.naturalWidth) measure(); else img.onload = measure;
   document.getElementById("btnViewerDownload").onclick = () => downloadPhoto(item);
