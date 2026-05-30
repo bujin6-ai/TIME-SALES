@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>일자별 사진 공유</title>
+<title>킴스클럽 야탑점 실적 공유</title>
 <style>
   :root {
     --bg: #0f1220;
@@ -125,7 +125,7 @@
 
 <header>
   <div class="titlebar">
-    <h1>📸 일자별 사진 공유</h1>
+    <h1>📸 킴스클럽 야탑점 실적 공유</h1>
     <button class="iconbtn" id="btnRefresh" title="새로고침">⟳</button>
     <button class="iconbtn" id="btnSettings" title="설정">⚙️</button>
   </div>
@@ -265,6 +265,11 @@ function pad(n) { return String(n).padStart(2, "0"); }
 // ---------- base64 (UTF-8 안전) ----------
 function utf8ToB64(str) { return btoa(unescape(encodeURIComponent(str))); }
 function b64ToUtf8(b64) { return decodeURIComponent(escape(atob(b64.replace(/\n/g, "")))); }
+// 파일명에 안전한 base64url (+/=, % 없음)
+function b64urlEncode(str) { return utf8ToB64(str).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); }
+function b64urlDecode(s) { s = s.replace(/-/g, "+").replace(/_/g, "/"); while (s.length % 4) s += "="; return b64ToUtf8(s); }
+// 경로의 각 구간을 안전하게 인코딩 (한글/특수문자 포함 경로용)
+function encPath(path) { return path.split("/").map(encodeURIComponent).join("/"); }
 
 // ---------- config.json ----------
 async function loadConfig() {
@@ -297,19 +302,27 @@ async function saveConfig() {
 
 // ---------- 사진 목록 ----------
 function parseName(filename) {
-  // HHMMSS__uploader__memo__original.ext
+  // 신버전: HHMMSS__<base64url(JSON)>.ext  /  구버전: HHMMSS__uploader__memo__orig.ext
   const dot = filename.lastIndexOf(".");
   const ext = dot >= 0 ? filename.slice(dot) : "";
   const base = dot >= 0 ? filename.slice(0, dot) : filename;
   const parts = base.split(SEP);
   const time = parts[0] || "";
-  const uploader = parts[1] ? decodeURIComponent(parts[1]) : "(미상)";
-  const memo = parts[2] ? decodeURIComponent(parts[2]) : "";
   const hhmm = time.length >= 4 ? `${time.slice(0,2)}:${time.slice(2,4)}` : "";
+  let uploader = "(미상)", memo = "";
+  try {
+    const meta = JSON.parse(b64urlDecode(parts[1] || ""));
+    if (meta && typeof meta === "object") { uploader = meta.u || uploader; memo = meta.m || ""; }
+  } catch (e) {
+    // 구버전 호환
+    if (parts[1]) { try { uploader = decodeURIComponent(parts[1]); } catch (_) { uploader = parts[1]; } }
+    if (parts[2]) { try { memo = decodeURIComponent(parts[2]); } catch (_) { memo = parts[2]; } }
+  }
   return { uploader, memo, hhmm, ext };
 }
 async function listPhotos(date) {
-  const r = await fetch(`${API}/repos/${conn.owner}/${conn.repo}/contents/photos/${date}?ref=${conn.branch}`, { headers: headers() });
+  const r = await fetch(`${API}/repos/${conn.owner}/${conn.repo}/contents/photos/${date}?ref=${conn.branch}&_=${Date.now()}`,
+    { headers: headers(), cache: "no-store" });
   if (r.status === 404) return [];
   if (!r.ok) throw new Error("목록 로드 실패 (" + r.status + ")");
   const arr = await r.json();
@@ -320,8 +333,8 @@ async function listPhotos(date) {
 async function fetchBlobUrl(item) {
   // 비공개 저장소 지원: 토큰 있으면 인증 fetch, 없으면 download_url 직접
   if (conn.token) {
-    const r = await fetch(`${API}/repos/${conn.owner}/${conn.repo}/contents/${item.path}?ref=${conn.branch}`,
-      { headers: headers({ "Accept": "application/vnd.github.raw" }) });
+    const r = await fetch(`${API}/repos/${conn.owner}/${conn.repo}/contents/${encPath(item.path)}?ref=${conn.branch}`,
+      { headers: headers({ "Accept": "application/vnd.github.raw" }), cache: "no-store" });
     if (!r.ok) throw new Error("이미지 로드 실패");
     const blob = await r.blob();
     const url = URL.createObjectURL(blob); objectUrls.push(url); return url;
@@ -390,8 +403,8 @@ async function downloadPhoto(item) {
     toast("다운로드 준비 중…");
     let url;
     if (conn.token) {
-      const r = await fetch(`${API}/repos/${conn.owner}/${conn.repo}/contents/${item.path}?ref=${conn.branch}`,
-        { headers: headers({ "Accept": "application/vnd.github.raw" }) });
+      const r = await fetch(`${API}/repos/${conn.owner}/${conn.repo}/contents/${encPath(item.path)}?ref=${conn.branch}`,
+        { headers: headers({ "Accept": "application/vnd.github.raw" }), cache: "no-store" });
       const blob = await r.blob(); url = URL.createObjectURL(blob);
     } else {
       const r = await fetch(item.download_url); const blob = await r.blob(); url = URL.createObjectURL(blob);
@@ -407,7 +420,7 @@ async function downloadPhoto(item) {
 async function deletePhoto(item) {
   if (!confirm(`삭제하시겠습니까?\n${item.name}`)) return;
   try {
-    const r = await fetch(`${API}/repos/${conn.owner}/${conn.repo}/contents/${item.path}`,
+    const r = await fetch(`${API}/repos/${conn.owner}/${conn.repo}/contents/${encPath(item.path)}`,
       { method: "DELETE", headers: headers({ "Content-Type": "application/json" }),
         body: JSON.stringify({ message: "사진 삭제: " + item.name, sha: item.sha, branch: conn.branch }) });
     if (!r.ok) throw new Error(await r.text());
@@ -464,9 +477,9 @@ async function doUpload() {
       const now = new Date();
       const time = pad(now.getHours()) + pad(now.getMinutes()) + pad(now.getSeconds()) + pad(i);
       const extMatch = file.name.match(/\.[a-z0-9]+$/i);
-      const ext = extMatch ? extMatch[0].toLowerCase() : ".jpg";
-      const orig = file.name.replace(/\.[a-z0-9]+$/i, "").replace(/[^\w가-힣-]/g, "");
-      const fname = [time, encodeURIComponent(member), encodeURIComponent(memo), encodeURIComponent(orig)].join(SEP) + ext;
+      const ext = extMatch ? extMatch[0].toLowerCase() : ".png";
+      const meta = b64urlEncode(JSON.stringify({ u: member, m: memo }));
+      const fname = [time, meta].join(SEP) + ext;  // 모두 ASCII, % 없음 → 안전
       const path = `photos/${date}/${fname}`;
       const content = await fileToB64(file);
       const r = await fetch(`${API}/repos/${conn.owner}/${conn.repo}/contents/${path}`,
