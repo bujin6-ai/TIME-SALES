@@ -117,8 +117,9 @@
   .viewer .vtop button { background: rgba(255,255,255,.12); color: #fff; border: none; padding: 10px 16px; border-radius: 12px; font-size: 15px; cursor: pointer; }
   .viewer .vtop .zb { padding: 10px 15px; font-size: 18px; font-weight: 700; min-width: 46px; }
   .viewer .vtop .zpct { color: #fff; align-self: center; margin-right: auto; padding: 0 6px; font-size: 14px; font-variant-numeric: tabular-nums; }
-  .viewer .vbody { flex: 1; display: grid; place-items: center; overflow: hidden; padding: 10px; touch-action: none; }
-  .viewer img { max-width: 100%; max-height: 100%; object-fit: contain; will-change: transform; user-select: none; -webkit-user-drag: none; }
+  .viewer .vbody { flex: 1; display: flex; align-items: safe center; justify-content: safe center;
+    overflow: auto; padding: 10px; touch-action: none; -webkit-overflow-scrolling: touch; }
+  .viewer img { display: block; max-width: 100%; max-height: 100%; user-select: none; -webkit-user-drag: none; }
   .spin { width: 26px; height: 26px; border: 3px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: r 1s linear infinite; }
   @keyframes r { to { transform: rotate(360deg); } }
 </style>
@@ -502,50 +503,64 @@ async function doUpload() {
   finally { btn.disabled = false; btn.textContent = "업로드"; }
 }
 
-// ---------- 뷰어 (확대/축소) ----------
+// ---------- 뷰어 (확대/축소 + 스크롤) ----------
+// 확대 시 이미지를 실제로 크게 만들고( width 변경 ), 넘치는 부분은 스크롤로 본다.
+// → 모바일 브라우저 기본 제스처와 충돌하지 않고 세로 긴 사진도 자유롭게 스크롤.
 let viewerZoom = null;
 function setupViewerZoom() {
   const body = document.getElementById("viewerBody");
-  const z = { scale: 1, tx: 0, ty: 0, img: null, baseW: 0, baseH: 0 };
+  const z = { scale: 1, img: null, fitW: 0, fitH: 0 };
   const pointers = new Map();
   let pinchStartDist = 0, pinchStartScale = 1;
 
-  function clampPan() {
-    const cw = body.clientWidth, ch = body.clientHeight;
-    const sw = z.baseW * z.scale, sh = z.baseH * z.scale;
-    const ax = Math.max(0, (sw - cw) / 2), ay = Math.max(0, (sh - ch) / 2);
-    z.tx = Math.max(-ax, Math.min(ax, z.tx));
-    z.ty = Math.max(-ay, Math.min(ay, z.ty));
-  }
-  function apply(anim) {
-    if (!z.img) return;
-    z.img.style.transition = anim ? "transform .15s ease" : "none";
-    z.img.style.transform = `translate(${z.tx}px, ${z.ty}px) scale(${z.scale})`;
-    z.img.style.cursor = z.scale > 1 ? "grab" : "default";
+  function updatePct() {
     const pct = document.getElementById("zoomPct");
     if (pct) pct.textContent = Math.round(z.scale * 100) + "%";
   }
-  function zoomTo(ns, fx, fy, anim) {
+  // 확대/축소 적용 (현재 보이는 중심을 유지)
+  function applyZoom() {
+    const img = z.img; if (!img) return;
+    const prevCX = body.scrollLeft + body.clientWidth / 2;
+    const prevCY = body.scrollTop + body.clientHeight / 2;
+    const prevW = body.scrollWidth, prevH = body.scrollHeight;
+    if (z.scale <= 1.001) {
+      z.scale = 1;
+      img.style.maxWidth = "100%"; img.style.maxHeight = "100%";
+      img.style.width = "auto"; img.style.height = "auto";
+    } else {
+      img.style.maxWidth = "none"; img.style.maxHeight = "none";
+      img.style.width = Math.round(z.fitW * z.scale) + "px";
+      img.style.height = "auto";
+    }
+    updatePct();
+    // 중심 유지
+    const rx = prevW ? prevCX / prevW : 0.5;
+    const ry = prevH ? prevCY / prevH : 0.5;
+    body.scrollLeft = rx * body.scrollWidth - body.clientWidth / 2;
+    body.scrollTop = ry * body.scrollHeight - body.clientHeight / 2;
+    img.style.cursor = z.scale > 1 ? "grab" : "default";
+  }
+  function zoomTo(ns) {
     if (!z.img) return;
-    ns = Math.max(1, Math.min(6, ns));
-    const rect = body.getBoundingClientRect();
-    const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
-    const gx = (fx == null ? cx : fx) - cx, gy = (fy == null ? cy : fy) - cy;
-    z.tx = gx - (gx - z.tx) * (ns / z.scale);
-    z.ty = gy - (gy - z.ty) * (ns / z.scale);
-    z.scale = ns; clampPan(); apply(anim);
+    if (!z.fitW) { z.fitW = z.img.offsetWidth; z.fitH = z.img.offsetHeight; }
+    z.scale = Math.max(1, Math.min(6, ns));
+    applyZoom();
   }
   z.zoomTo = zoomTo;
-  z.reset = () => { z.scale = 1; z.tx = 0; z.ty = 0; apply(true); };
+  z.reset = () => zoomTo(1);
+  z.setImg = (img) => { z.img = img; z.scale = 1; z.fitW = 0; z.fitH = 0; };
+  z.measure = () => { z.fitW = z.img.offsetWidth; z.fitH = z.img.offsetHeight; };
 
   body.addEventListener("wheel", e => {
     if (!z.img) return; e.preventDefault();
-    zoomTo(z.scale * (e.deltaY < 0 ? 1.2 : 1 / 1.2), e.clientX, e.clientY, false);
+    zoomTo(z.scale * (e.deltaY < 0 ? 1.2 : 1 / 1.2));
   }, { passive: false });
 
+  body.addEventListener("dblclick", () => { if (z.img) zoomTo(z.scale > 1 ? 1 : 2.5); });
+
+  // 포인터: 한 손가락 = 이동(스크롤), 두 손가락 = 핀치 확대/축소
   body.addEventListener("pointerdown", e => {
     if (!z.img) return;
-    try { body.setPointerCapture(e.pointerId); } catch (_) {}
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pointers.size === 2) {
       const p = [...pointers.values()];
@@ -560,16 +575,16 @@ function setupViewerZoom() {
     if (pointers.size === 2) {
       const p = [...pointers.values()];
       const dist = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
-      const mid = { x: (p[0].x + p[1].x) / 2, y: (p[0].y + p[1].y) / 2 };
-      if (pinchStartDist > 0) zoomTo(pinchStartScale * dist / pinchStartDist, mid.x, mid.y, false);
+      if (pinchStartDist > 0) { e.preventDefault(); zoomTo(pinchStartScale * dist / pinchStartDist); }
     } else if (pointers.size === 1 && z.scale > 1) {
-      z.tx += e.clientX - prev.x; z.ty += e.clientY - prev.y; clampPan(); apply(false);
+      e.preventDefault();
+      body.scrollLeft -= e.clientX - prev.x;
+      body.scrollTop -= e.clientY - prev.y;
     }
   });
   function up(e) { pointers.delete(e.pointerId); if (pointers.size < 2) pinchStartDist = 0; }
   body.addEventListener("pointerup", up);
   body.addEventListener("pointercancel", up);
-  body.addEventListener("dblclick", e => { if (z.img) zoomTo(z.scale > 1 ? 1 : 2.5, e.clientX, e.clientY, true); });
 
   return z;
 }
@@ -579,10 +594,11 @@ function openViewer(url, item) {
   body.innerHTML = `<img id="viewerImg" src="${url}" />`;
   if (!viewerZoom) viewerZoom = setupViewerZoom();
   const img = document.getElementById("viewerImg");
-  viewerZoom.img = img; viewerZoom.scale = 1; viewerZoom.tx = 0; viewerZoom.ty = 0;
-  img.style.transform = "";
+  viewerZoom.setImg(img);
+  img.style.maxWidth = "100%"; img.style.maxHeight = "100%"; img.style.width = "auto"; img.style.height = "auto";
   document.getElementById("zoomPct").textContent = "100%";
-  const measure = () => { viewerZoom.baseW = img.offsetWidth; viewerZoom.baseH = img.offsetHeight; };
+  body.scrollTop = 0; body.scrollLeft = 0;
+  const measure = () => viewerZoom.measure();
   if (img.complete && img.naturalWidth) measure(); else img.onload = measure;
   document.getElementById("btnViewerDownload").onclick = () => downloadPhoto(item);
   v.classList.add("show");
@@ -690,8 +706,8 @@ const pz = document.getElementById("pasteZone");
 pz.addEventListener("drop", e => { if (e.dataTransfer && e.dataTransfer.files) addFiles(e.dataTransfer.files); });
 
 document.getElementById("btnViewerClose").onclick = () => document.getElementById("viewer").classList.remove("show");
-document.getElementById("btnZoomIn").onclick = () => viewerZoom && viewerZoom.zoomTo(viewerZoom.scale * 1.4, null, null, true);
-document.getElementById("btnZoomOut").onclick = () => viewerZoom && viewerZoom.zoomTo(viewerZoom.scale / 1.4, null, null, true);
+document.getElementById("btnZoomIn").onclick = () => viewerZoom && viewerZoom.zoomTo(viewerZoom.scale * 1.4);
+document.getElementById("btnZoomOut").onclick = () => viewerZoom && viewerZoom.zoomTo(viewerZoom.scale / 1.4);
 document.getElementById("btnZoomReset").onclick = () => viewerZoom && viewerZoom.reset();
 
 function openSettings() {
