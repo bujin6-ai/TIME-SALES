@@ -1,0 +1,68 @@
+name: 사진 업로드 이메일 알림
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'photos/**'
+
+jobs:
+  email:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: 수신자 / 업로드 목록 추출
+        id: info
+        run: |
+          if [ -f config.json ]; then
+            emails=$(jq -r '.recipients | join(",")' config.json)
+          else
+            emails=""
+          fi
+          echo "emails=$emails" >> "$GITHUB_OUTPUT"
+          before="${{ github.event.before }}"
+          if [ "$before" = "0000000000000000000000000000000000000000" ]; then
+            files=$(git show --name-only --pretty=format: HEAD | grep '^photos/' || true)
+          else
+            files=$(git diff --name-only "$before" "${{ github.sha }}" | grep '^photos/' || true)
+          fi
+          count=$(echo "$files" | grep -c . || true)
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          {
+            echo "files<<EOF"
+            echo "$files"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: 수신자 없으면 건너뜀
+        if: steps.info.outputs.emails == ''
+        run: echo "config.json 에 수신 이메일이 없어 발송을 건너뜁니다."
+
+      - name: 이메일 발송
+        if: steps.info.outputs.emails != ''
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.MAIL_SERVER }}
+          server_port: ${{ secrets.MAIL_PORT }}
+          secure: ${{ secrets.MAIL_PORT == '465' }}
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: "[사진공유] 새 사진 ${{ steps.info.outputs.count }}장이 업로드되었습니다"
+          to: ${{ steps.info.outputs.emails }}
+          from: 사진공유앱 <${{ secrets.MAIL_USERNAME }}>
+          body: |
+            새 사진이 업로드되었습니다.
+
+            업로드된 파일 수: ${{ steps.info.outputs.count }}장
+
+            파일 목록:
+            ${{ steps.info.outputs.files }}
+
+            앱에서 확인하기:
+            https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+
+            (이 메일은 자동 발송되었습니다.)
