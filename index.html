@@ -115,8 +115,9 @@
   .viewer.show { display: flex; }
   .viewer .vtop { display: flex; justify-content: flex-end; gap: 10px; padding: 14px; padding-top: max(14px, env(safe-area-inset-top)); }
   .viewer .vtop button { background: rgba(255,255,255,.12); color: #fff; border: none; padding: 10px 16px; border-radius: 12px; font-size: 15px; cursor: pointer; }
-  .viewer .vbody { flex: 1; display: grid; place-items: center; overflow: auto; padding: 10px; }
-  .viewer img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .viewer .vtop .zb { padding: 10px 15px; font-size: 18px; font-weight: 700; min-width: 46px; }
+  .viewer .vbody { flex: 1; display: grid; place-items: center; overflow: hidden; padding: 10px; touch-action: none; }
+  .viewer img { max-width: 100%; max-height: 100%; object-fit: contain; will-change: transform; user-select: none; -webkit-user-drag: none; }
   .spin { width: 26px; height: 26px; border: 3px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: r 1s linear infinite; }
   @keyframes r { to { transform: rotate(360deg); } }
 </style>
@@ -214,6 +215,9 @@
 <!-- 뷰어 -->
 <div class="viewer" id="viewer">
   <div class="vtop">
+    <button class="zb" id="btnZoomOut">－</button>
+    <button class="zb" id="btnZoomIn">＋</button>
+    <button class="zb" id="btnZoomReset">원본</button>
     <button id="btnViewerDownload">⬇ 다운로드</button>
     <button id="btnViewerClose">✕ 닫기</button>
   </div>
@@ -496,10 +500,85 @@ async function doUpload() {
   finally { btn.disabled = false; btn.textContent = "업로드"; }
 }
 
-// ---------- 뷰어 ----------
+// ---------- 뷰어 (확대/축소) ----------
+let viewerZoom = null;
+function setupViewerZoom() {
+  const body = document.getElementById("viewerBody");
+  const z = { scale: 1, tx: 0, ty: 0, img: null, baseW: 0, baseH: 0 };
+  const pointers = new Map();
+  let pinchStartDist = 0, pinchStartScale = 1;
+
+  function clampPan() {
+    const cw = body.clientWidth, ch = body.clientHeight;
+    const sw = z.baseW * z.scale, sh = z.baseH * z.scale;
+    const ax = Math.max(0, (sw - cw) / 2), ay = Math.max(0, (sh - ch) / 2);
+    z.tx = Math.max(-ax, Math.min(ax, z.tx));
+    z.ty = Math.max(-ay, Math.min(ay, z.ty));
+  }
+  function apply(anim) {
+    if (!z.img) return;
+    z.img.style.transition = anim ? "transform .15s ease" : "none";
+    z.img.style.transform = `translate(${z.tx}px, ${z.ty}px) scale(${z.scale})`;
+    z.img.style.cursor = z.scale > 1 ? "grab" : "default";
+  }
+  function zoomTo(ns, fx, fy, anim) {
+    if (!z.img) return;
+    ns = Math.max(1, Math.min(6, ns));
+    const rect = body.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+    const gx = (fx == null ? cx : fx) - cx, gy = (fy == null ? cy : fy) - cy;
+    z.tx = gx - (gx - z.tx) * (ns / z.scale);
+    z.ty = gy - (gy - z.ty) * (ns / z.scale);
+    z.scale = ns; clampPan(); apply(anim);
+  }
+  z.zoomTo = zoomTo;
+  z.reset = () => { z.scale = 1; z.tx = 0; z.ty = 0; apply(true); };
+
+  body.addEventListener("wheel", e => {
+    if (!z.img) return; e.preventDefault();
+    zoomTo(z.scale * (e.deltaY < 0 ? 1.2 : 1 / 1.2), e.clientX, e.clientY, false);
+  }, { passive: false });
+
+  body.addEventListener("pointerdown", e => {
+    if (!z.img) return;
+    body.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.size === 2) {
+      const p = [...pointers.values()];
+      pinchStartDist = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
+      pinchStartScale = z.scale;
+    }
+  });
+  body.addEventListener("pointermove", e => {
+    if (!pointers.has(e.pointerId)) return;
+    const prev = pointers.get(e.pointerId);
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.size === 2) {
+      const p = [...pointers.values()];
+      const dist = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
+      const mid = { x: (p[0].x + p[1].x) / 2, y: (p[0].y + p[1].y) / 2 };
+      if (pinchStartDist > 0) zoomTo(pinchStartScale * dist / pinchStartDist, mid.x, mid.y, false);
+    } else if (pointers.size === 1 && z.scale > 1) {
+      z.tx += e.clientX - prev.x; z.ty += e.clientY - prev.y; clampPan(); apply(false);
+    }
+  });
+  function up(e) { pointers.delete(e.pointerId); if (pointers.size < 2) pinchStartDist = 0; }
+  body.addEventListener("pointerup", up);
+  body.addEventListener("pointercancel", up);
+  body.addEventListener("dblclick", e => { if (z.img) zoomTo(z.scale > 1 ? 1 : 2.5, e.clientX, e.clientY, true); });
+
+  return z;
+}
 function openViewer(url, item) {
   const v = document.getElementById("viewer");
-  document.getElementById("viewerBody").innerHTML = `<img src="${url}" />`;
+  const body = document.getElementById("viewerBody");
+  body.innerHTML = `<img id="viewerImg" src="${url}" />`;
+  if (!viewerZoom) viewerZoom = setupViewerZoom();
+  const img = document.getElementById("viewerImg");
+  viewerZoom.img = img; viewerZoom.scale = 1; viewerZoom.tx = 0; viewerZoom.ty = 0;
+  img.style.transform = "";
+  const measure = () => { viewerZoom.baseW = img.offsetWidth; viewerZoom.baseH = img.offsetHeight; };
+  if (img.complete && img.naturalWidth) measure(); else img.onload = measure;
   document.getElementById("btnViewerDownload").onclick = () => downloadPhoto(item);
   v.classList.add("show");
 }
@@ -606,6 +685,9 @@ const pz = document.getElementById("pasteZone");
 pz.addEventListener("drop", e => { if (e.dataTransfer && e.dataTransfer.files) addFiles(e.dataTransfer.files); });
 
 document.getElementById("btnViewerClose").onclick = () => document.getElementById("viewer").classList.remove("show");
+document.getElementById("btnZoomIn").onclick = () => viewerZoom && viewerZoom.zoomTo(viewerZoom.scale * 1.4, null, null, true);
+document.getElementById("btnZoomOut").onclick = () => viewerZoom && viewerZoom.zoomTo(viewerZoom.scale / 1.4, null, null, true);
+document.getElementById("btnZoomReset").onclick = () => viewerZoom && viewerZoom.reset();
 
 function openSettings() {
   document.getElementById("cfgOwner").value = conn.owner;
