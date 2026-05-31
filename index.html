@@ -371,13 +371,15 @@ function doUpload(){
     toast('업로드 완료! 알림 메일이 발송됩니다.');
     renderPhotos(cur);
     document.getElementById('status').textContent=date+' · 사진 '+cur.length+'장';
+    // 메일 백그라운드 발송 (사진 인라인 + 앱 링크) — UI는 기다리지 않음
+    if(uploaded.length){ apiPost({action:'notify',date:date,uploader:member,memo:memo,fileIds:uploaded.map(function(u){return u.fileId;})}).catch(function(){}); }
     setTimeout(render,1500);   // 백그라운드 갱신(서버 반영 확인)
   }
   function next(){
     if(i>=files.length){finish();return;}
-    var file=files[i];i++;var isLast=(i>=files.length);btn.textContent='업로드 중… ('+i+'/'+files.length+')';
+    var file=files[i];i++;btn.textContent='업로드 중… ('+i+'/'+files.length+')';
     prepImage(file).then(blobToB64).then(function(b64){
-      return apiPost({action:'upload',date:date,uploader:member,memo:memo,filename:pad(i)+'_'+member+'.jpg',mime:'image/jpeg',dataBase64:b64,notify:isLast});
+      return apiPost({action:'upload',date:date,uploader:member,memo:memo,filename:pad(i)+'_'+member+'.jpg',mime:'image/jpeg',dataBase64:b64});
     }).then(function(resp){
       if(resp&&resp.fileId) uploaded.push({fileId:resp.fileId,uploader:member,memo:memo,time:resp.time||'',comments:0,cmts:[]});
       next();
