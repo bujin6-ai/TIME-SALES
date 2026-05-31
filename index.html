@@ -303,6 +303,7 @@ function renderPhotos(photos){
       '<div class="row"><button class="cmt" title="댓글">💬'+(p.comments>0?'<span class="badge">'+p.comments+'</span>':'')+'</button><button class="dl" title="저장">'+DL_SVG+'</button><button class="del">삭제</button></div>';
     grid.appendChild(card);
     badgeByFileId[p.fileId]=card.querySelector('.cmt');
+    (function(im,fid){ if(!im)return; im.onerror=function(){ if(im._r)return;im._r=1; setTimeout(function(){im.src=thumbUrl(fid)+'&r='+Date.now();},2500); }; })(card.querySelector('.imgwrap img'),p.fileId);
     card.querySelector('.imgwrap').onclick=function(){openViewer(p);};
     card.querySelector('.cmt').onclick=function(){openComments(p);};
     card.querySelector('.dl').onclick=function(){window.open(dlUrl(p.fileId),'_blank');};
@@ -358,13 +359,29 @@ function doUpload(){
   if(!pendingFiles.length){toast('사진을 선택하거나 붙여넣으세요');return;}
   localStorage.setItem('ps_member',member);   // 담당자 기억
   var btn=document.getElementById('btnDoUpload');btn.disabled=true;
-  var files=pendingFiles.slice();var i=0;
+  var files=pendingFiles.slice();var i=0;var uploaded=[];
+  function finish(){
+    // 방금 올린 사진을 캐시에 추가하고 즉시 표시 (목록 재요청 대기 없음)
+    document.getElementById('datePicker').value=date;
+    var cur=lsGet('ps_list_'+date)||[];
+    cur=cur.concat(uploaded);
+    lsSet('ps_list_'+date,cur);
+    pendingFiles=[];renderPreview();closeOverlay('uploadOverlay');
+    btn.disabled=false;btn.textContent='업로드';
+    toast('업로드 완료! 알림 메일이 발송됩니다.');
+    renderPhotos(cur);
+    document.getElementById('status').textContent=date+' · 사진 '+cur.length+'장';
+    setTimeout(render,1500);   // 백그라운드 갱신(서버 반영 확인)
+  }
   function next(){
-    if(i>=files.length){toast('업로드 완료! 알림 메일이 발송됩니다.');pendingFiles=[];renderPreview();closeOverlay('uploadOverlay');document.getElementById('datePicker').value=date;btn.disabled=false;btn.textContent='업로드';localStorage.removeItem('ps_list_'+date);render();return;}
-    var file=files[i];i++;btn.textContent='업로드 중… ('+i+'/'+files.length+')';
+    if(i>=files.length){finish();return;}
+    var file=files[i];i++;var isLast=(i>=files.length);btn.textContent='업로드 중… ('+i+'/'+files.length+')';
     prepImage(file).then(blobToB64).then(function(b64){
-      return apiPost({action:'upload',date:date,uploader:member,memo:memo,filename:pad(i)+'_'+member+'.jpg',mime:'image/jpeg',dataBase64:b64});
-    }).then(function(){next();}).catch(function(e){toast('업로드 실패: '+(e.message||e));btn.disabled=false;btn.textContent='업로드';});
+      return apiPost({action:'upload',date:date,uploader:member,memo:memo,filename:pad(i)+'_'+member+'.jpg',mime:'image/jpeg',dataBase64:b64,notify:isLast});
+    }).then(function(resp){
+      if(resp&&resp.fileId) uploaded.push({fileId:resp.fileId,uploader:member,memo:memo,time:resp.time||'',comments:0,cmts:[]});
+      next();
+    }).catch(function(e){toast('업로드 실패: '+(e.message||e));btn.disabled=false;btn.textContent='업로드';});
   }
   next();
 }
@@ -470,9 +487,16 @@ function openComments(p){
   currentPhoto=p;
   document.getElementById('cmtName').value=localStorage.getItem('ps_name')||localStorage.getItem('ps_member')||'';
   document.getElementById('cmtText').value='';
-  document.getElementById('commentList').innerHTML='<div style="text-align:center;padding:14px"><div class="spin" style="margin:0 auto"></div></div>';
+  // 목록에 함께 받아온 댓글을 즉시 표시(기다림 없음)
+  if(p.cmts){ renderComments(p.cmts); }
+  else { document.getElementById('commentList').innerHTML='<div style="text-align:center;padding:14px"><div class="spin" style="margin:0 auto"></div></div>'; }
   openOverlay('commentOverlay');
-  apiGet({action:'comments',fileId:p.fileId}).then(renderComments).catch(function(e){document.getElementById('commentList').innerHTML='<div class="hint">불러오기 실패: '+escapeHtml(e.message||e)+'</div>';});
+  // 다른 사람이 방금 단 댓글까지 백그라운드로 갱신
+  apiGet({action:'comments',fileId:p.fileId}).then(function(list){
+    p.cmts=list;
+    if(currentPhoto&&currentPhoto.fileId===p.fileId&&document.getElementById('commentOverlay').classList.contains('show')) renderComments(list);
+    setBadge(p.fileId,list.length);
+  }).catch(function(e){ if(!p.cmts)document.getElementById('commentList').innerHTML='<div class="hint">불러오기 실패: '+escapeHtml(e.message||e)+'</div>'; });
 }
 function renderComments(list){
   var box=document.getElementById('commentList');
@@ -496,6 +520,7 @@ document.getElementById('btnAddComment').onclick=function(){
   var fid=currentPhoto.fileId;
   apiPost({action:'addComment',fileId:fid,name:name,text:text}).then(function(list){
     document.getElementById('cmtText').value='';renderComments(list);
+    if(currentPhoto&&currentPhoto.fileId===fid) currentPhoto.cmts=list;   // 즉시 재표시용 캐시
     setBadge(fid, list.length);                 // 배지 즉시 갱신
     var d=document.getElementById('datePicker').value; localStorage.removeItem('ps_list_'+d);
   }).catch(function(e){toast('등록 실패: '+(e.message||e));}).then(function(){btn.disabled=false;btn.textContent='댓글 등록';});
