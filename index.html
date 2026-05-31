@@ -13,13 +13,22 @@
   html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:"Pretendard Variable",Pretendard,-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic",system-ui,sans-serif;letter-spacing:-0.01em;transition:background .25s,color .25s;}
   body{padding-bottom:90px;min-height:100vh;}
   header{position:sticky;top:0;z-index:30;background:var(--headerbg);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:12px 16px;}
-  .titlebar{display:flex;align-items:center;gap:10px;}
+  .titlebar{display:flex;align-items:center;gap:10px;max-width:920px;margin:0 auto;width:100%;}
   .titlebar h1{font-size:17px;margin:0;flex:1;}
   .iconbtn{background:var(--card2);border:1px solid var(--line);color:var(--text);width:40px;height:40px;border-radius:12px;font-size:18px;cursor:pointer;display:grid;place-items:center;transition:background .15s,border-color .15s,transform .1s;}
   .iconbtn:hover{background:var(--hover);border-color:var(--accent);}
   .iconbtn:active{transform:scale(.93);}
-  .daterow{display:flex;align-items:center;gap:8px;margin-top:12px;}
+  /* 테마 슬라이드 스위치 */
+  .themeToggle{position:relative;width:64px;height:34px;border-radius:20px;border:1px solid var(--line);background:var(--card2);cursor:pointer;padding:0;flex:0 0 auto;transition:background .2s,border-color .2s;}
+  .themeToggle:hover{border-color:var(--accent);}
+  .themeToggle .ti{position:absolute;top:0;width:32px;height:34px;display:grid;place-items:center;font-size:14px;z-index:2;}
+  .themeToggle .sun{left:1px;}
+  .themeToggle .moon{right:1px;}
+  .themeToggle .knob{position:absolute;top:3px;width:28px;height:28px;border-radius:50%;background:var(--accent);box-shadow:0 2px 6px rgba(0,0,0,.35);transition:left .22s cubic-bezier(.4,1.3,.5,1);z-index:1;left:33px;}
+  html.light .themeToggle .knob{left:3px;}
+  .daterow{display:flex;align-items:center;gap:8px;margin:12px auto 0;max-width:920px;width:100%;}
   .daterow input[type=date]{flex:1;background:var(--card2);border:1px solid var(--line);color:var(--text);padding:11px 12px;border-radius:12px;font-size:16px;}
+  @media(min-width:600px){ .daterow input[type=date]{flex:0 1 240px;} }
   .navbtn{background:var(--card2);border:1px solid var(--line);color:var(--text);padding:0 14px;height:44px;border-radius:12px;font-size:18px;cursor:pointer;transition:background .15s,border-color .15s,transform .1s;}
   .navbtn:hover{background:var(--hover);border-color:var(--accent);}
   .navbtn:active{transform:scale(.93);}
@@ -42,6 +51,8 @@
   .photo .row{display:flex;gap:6px;padding:0 10px 10px;}
   .photo .row button{flex:1;background:var(--card2);border:1px solid var(--line);color:var(--text);padding:8px;border-radius:9px;font-size:12px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:5px;transition:background .15s,border-color .15s;}
   .photo .row button:hover{background:var(--hover);border-color:var(--accent);}
+  .photo .row button{padding:8px 4px;}
+  .photo .row button.cmt{font-size:14px;}
   .photo .row button.del{color:var(--danger);}
   .photo .row button.del:hover{border-color:var(--danger);}
   .empty{text-align:center;color:var(--muted);padding:60px 20px;}
@@ -72,6 +83,14 @@
   .addrow button{background:var(--accent2);border:none;color:#fff;padding:0 16px;border-radius:11px;cursor:pointer;transition:filter .15s;}
   .addrow button:hover{filter:brightness(1.12);}
   .hint{font-size:12px;color:var(--muted);line-height:1.5;margin-top:6px;}
+  /* 댓글 */
+  #commentOverlay{z-index:70;}
+  .commentList{max-height:38vh;overflow-y:auto;margin-top:4px;display:flex;flex-direction:column;gap:8px;}
+  .commentList .cmt{background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:9px 12px;}
+  .commentList .cmtHead{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:3px;}
+  .commentList .cmtHead b{font-size:13px;}
+  .commentList .cmtHead span{font-size:11px;color:var(--muted);}
+  .commentList .cmtText{font-size:14px;line-height:1.45;word-break:break-word;white-space:pre-wrap;}
   .pastezone{border:1.5px dashed var(--line);border-radius:14px;padding:14px;margin-top:6px;background:var(--card2);}
   .pastezone.drag{border-color:var(--accent);background:#20264a;}
   .pzbtns{display:flex;gap:10px;}
@@ -116,7 +135,9 @@
 <header>
   <div class="titlebar">
     <h1>📸 킴스클럽 야탑점 실적 공유</h1>
-    <button class="iconbtn" id="btnTheme" title="다크/일반 모드">☀️</button>
+    <button class="themeToggle" id="btnTheme" title="다크/일반 모드 전환" aria-label="테마 전환">
+      <span class="ti sun">☀️</span><span class="ti moon">🌙</span><span class="knob"></span>
+    </button>
     <button class="iconbtn" id="btnRefresh" title="새로고침">⟳</button>
     <button class="iconbtn" id="btnSettings" title="설정">⚙️</button>
   </div>
@@ -174,6 +195,19 @@
   </div>
 </div>
 
+<div class="overlay" id="commentOverlay">
+  <div class="sheet">
+    <h2>💬 댓글</h2>
+    <div class="commentList" id="commentList"></div>
+    <label class="fld">이름</label>
+    <input type="text" id="cmtName" placeholder="이름을 입력하세요" />
+    <label class="fld">댓글</label>
+    <textarea id="cmtText" placeholder="댓글을 입력하세요"></textarea>
+    <button class="btn" id="btnAddComment">댓글 등록</button>
+    <button class="btn ghost" id="btnCloseComment">닫기</button>
+  </div>
+</div>
+
 <div class="viewer" id="viewer">
   <div class="vtop">
     <div class="vleft">
@@ -183,6 +217,7 @@
       <button id="btnZoomReset" title="원본 크기">⟲<span class="txt"> 원본</span></button>
     </div>
     <div class="vright">
+      <button id="btnViewerComment" title="댓글">💬<span class="txt"> 댓글</span></button>
       <button id="btnViewerDownload" title="다운로드">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="M8 11l4 4 4-4"/><path d="M5 20h14"/></svg>
         <span class="txt">다운로드</span>
@@ -205,6 +240,7 @@ var DL_SVG = "<svg viewBox='0 0 24 24' width='15' height='15' fill='none' stroke
 
 var cfg = { members: [], recipients: [] };
 var pendingFiles = [];
+var currentPhoto = null;
 
 // ---- API ----
 function apiReady(){ return API_URL.indexOf('script.google.com') >= 0; }
@@ -256,9 +292,10 @@ function renderPhotos(photos){
     var card=document.createElement('div');card.className='photo';
     card.innerHTML='<div class="imgwrap"><img src="'+thumbUrl(p.fileId)+'" loading="lazy" referrerpolicy="no-referrer" /></div>'+
       '<div class="meta"><div class="who">'+escapeHtml(p.uploader||'(미상)')+'</div><div class="time">'+escapeHtml(p.time||'')+'</div>'+(memo?'<div class="memo">'+escapeHtml(memo)+'</div>':'')+'</div>'+
-      '<div class="row"><button class="dl">'+DL_SVG+' 저장</button><button class="del">삭제</button></div>';
+      '<div class="row"><button class="cmt" title="댓글">💬</button><button class="dl" title="저장">'+DL_SVG+'</button><button class="del">삭제</button></div>';
     grid.appendChild(card);
     card.querySelector('.imgwrap').onclick=function(){openViewer(p);};
+    card.querySelector('.cmt').onclick=function(){openComments(p);};
     card.querySelector('.dl').onclick=function(){window.open(dlUrl(p.fileId),'_blank');};
     card.querySelector('.del').onclick=function(){deletePhoto(p);};
   });
@@ -372,6 +409,7 @@ function setupViewerZoom(){
   return z;
 }
 function openViewer(p){
+  currentPhoto=p;
   var v=document.getElementById('viewer');var body=document.getElementById('viewerBody');
   body.innerHTML='<div class="spin"></div>';
   if(!viewerZoom)viewerZoom=setupViewerZoom();
@@ -415,6 +453,42 @@ document.getElementById('btnViewerClose').onclick=function(){document.getElement
 document.getElementById('btnZoomIn').onclick=function(){viewerZoom&&viewerZoom.zoomBtn(1.4);};
 document.getElementById('btnZoomOut').onclick=function(){viewerZoom&&viewerZoom.zoomBtn(1/1.4);};
 document.getElementById('btnZoomReset').onclick=function(){viewerZoom&&viewerZoom.reset();};
+document.getElementById('btnViewerComment').onclick=function(){openComments(currentPhoto);};
+
+// ---- 댓글 ----
+function openComments(p){
+  if(!p)return;
+  currentPhoto=p;
+  document.getElementById('cmtName').value=localStorage.getItem('ps_name')||localStorage.getItem('ps_member')||'';
+  document.getElementById('cmtText').value='';
+  document.getElementById('commentList').innerHTML='<div style="text-align:center;padding:14px"><div class="spin" style="margin:0 auto"></div></div>';
+  openOverlay('commentOverlay');
+  apiGet({action:'comments',fileId:p.fileId}).then(renderComments).catch(function(e){document.getElementById('commentList').innerHTML='<div class="hint">불러오기 실패: '+escapeHtml(e.message||e)+'</div>';});
+}
+function renderComments(list){
+  var box=document.getElementById('commentList');
+  if(!list||!list.length){box.innerHTML='<div class="hint">아직 댓글이 없습니다. 첫 댓글을 남겨보세요.</div>';return;}
+  box.innerHTML='';
+  list.forEach(function(c){
+    var t=c.ts?new Date(Number(c.ts)):null;
+    var ts=t?((t.getMonth()+1)+'/'+t.getDate()+' '+pad(t.getHours())+':'+pad(t.getMinutes())):'';
+    var d=document.createElement('div');d.className='cmt';
+    d.innerHTML='<div class="cmtHead"><b>'+escapeHtml(c.name||'익명')+'</b><span>'+ts+'</span></div><div class="cmtText">'+escapeHtml(c.text||'')+'</div>';
+    box.appendChild(d);
+  });
+  box.scrollTop=box.scrollHeight;
+}
+document.getElementById('btnAddComment').onclick=function(){
+  var name=document.getElementById('cmtName').value.trim();
+  var text=document.getElementById('cmtText').value.trim();
+  if(!text){toast('댓글을 입력하세요');return;}
+  if(name)localStorage.setItem('ps_name',name);
+  var btn=this;btn.disabled=true;btn.textContent='등록 중…';
+  apiPost({action:'addComment',fileId:currentPhoto.fileId,name:name,text:text}).then(function(list){
+    document.getElementById('cmtText').value='';renderComments(list);
+  }).catch(function(e){toast('등록 실패: '+(e.message||e));}).then(function(){btn.disabled=false;btn.textContent='댓글 등록';});
+};
+document.getElementById('btnCloseComment').onclick=function(){closeOverlay('commentOverlay');};
 
 document.getElementById('btnSettings').onclick=function(){
   if(!settingsUnlocked){var pw=prompt('설정 비밀번호를 입력하세요');if(pw===null)return;if(pw!==SETTINGS_PW){toast('비밀번호가 틀렸습니다');return;}settingsUnlocked=true;window._pw=pw;}
@@ -435,7 +509,6 @@ document.getElementById('btnSaveConfig').onclick=function(){
 function applyTheme(t){
   var el=document.documentElement;
   if(t==='light') el.classList.add('light'); else el.classList.remove('light');
-  document.getElementById('btnTheme').textContent = (t==='light') ? '🌙' : '☀️';
   localStorage.setItem('ps_theme', t);
 }
 applyTheme(localStorage.getItem('ps_theme') || 'dark');
