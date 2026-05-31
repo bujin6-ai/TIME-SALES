@@ -52,7 +52,8 @@
   .photo .row button{flex:1;background:var(--card2);border:1px solid var(--line);color:var(--text);padding:8px;border-radius:9px;font-size:12px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:5px;transition:background .15s,border-color .15s;}
   .photo .row button:hover{background:var(--hover);border-color:var(--accent);}
   .photo .row button{padding:8px 4px;}
-  .photo .row button.cmt{font-size:14px;}
+  .photo .row button.cmt{font-size:14px;position:relative;overflow:visible;}
+  .photo .row button.cmt .badge{position:absolute;top:-6px;right:-4px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:var(--accent);color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;line-height:1;box-shadow:0 1px 3px rgba(0,0,0,.4);}
   .photo .row button.del{color:var(--danger);}
   .photo .row button.del:hover{border-color:var(--danger);}
   .empty{text-align:center;color:var(--muted);padding:60px 20px;}
@@ -241,6 +242,7 @@ var DL_SVG = "<svg viewBox='0 0 24 24' width='15' height='15' fill='none' stroke
 var cfg = { members: [], recipients: [] };
 var pendingFiles = [];
 var currentPhoto = null;
+var badgeByFileId = {};
 
 // ---- API ----
 function apiReady(){ return API_URL.indexOf('script.google.com') >= 0; }
@@ -284,16 +286,23 @@ function renderTags(){
 
 // ---- 목록 ----
 function emptyHtml(){ return '<div class="empty"><div class="big">🗓️</div><p>이 날짜에 등록된 사진이 없습니다.<br>＋ 버튼으로 추가하세요.</p></div>'; }
+function setBadge(fileId,cnt){
+  var btn=badgeByFileId[fileId]; if(!btn)return;
+  var b=btn.querySelector('.badge');
+  if(cnt>0){ if(!b){b=document.createElement('span');b.className='badge';btn.appendChild(b);} b.textContent=cnt; }
+  else if(b){ b.parentNode.removeChild(b); }
+}
 function renderPhotos(photos){
-  var grid=document.getElementById('grid');grid.innerHTML='';
+  var grid=document.getElementById('grid');grid.innerHTML='';badgeByFileId={};
   if(!photos.length){grid.innerHTML=emptyHtml();return;}
   photos.forEach(function(p){
     var memo=(p.memo && !/^\d{4}-\d{2}-\d{2}T/.test(String(p.memo)))?String(p.memo):'';   // 잘못 변환된 날짜값 숨김
     var card=document.createElement('div');card.className='photo';
     card.innerHTML='<div class="imgwrap"><img src="'+thumbUrl(p.fileId)+'" loading="lazy" referrerpolicy="no-referrer" /></div>'+
       '<div class="meta"><div class="who">'+escapeHtml(p.uploader||'(미상)')+'</div><div class="time">'+escapeHtml(p.time||'')+'</div>'+(memo?'<div class="memo">'+escapeHtml(memo)+'</div>':'')+'</div>'+
-      '<div class="row"><button class="cmt" title="댓글">💬</button><button class="dl" title="저장">'+DL_SVG+'</button><button class="del">삭제</button></div>';
+      '<div class="row"><button class="cmt" title="댓글">💬'+(p.comments>0?'<span class="badge">'+p.comments+'</span>':'')+'</button><button class="dl" title="저장">'+DL_SVG+'</button><button class="del">삭제</button></div>';
     grid.appendChild(card);
+    badgeByFileId[p.fileId]=card.querySelector('.cmt');
     card.querySelector('.imgwrap').onclick=function(){openViewer(p);};
     card.querySelector('.cmt').onclick=function(){openComments(p);};
     card.querySelector('.dl').onclick=function(){window.open(dlUrl(p.fileId),'_blank');};
@@ -484,8 +493,11 @@ document.getElementById('btnAddComment').onclick=function(){
   if(!text){toast('댓글을 입력하세요');return;}
   if(name)localStorage.setItem('ps_name',name);
   var btn=this;btn.disabled=true;btn.textContent='등록 중…';
-  apiPost({action:'addComment',fileId:currentPhoto.fileId,name:name,text:text}).then(function(list){
+  var fid=currentPhoto.fileId;
+  apiPost({action:'addComment',fileId:fid,name:name,text:text}).then(function(list){
     document.getElementById('cmtText').value='';renderComments(list);
+    setBadge(fid, list.length);                 // 배지 즉시 갱신
+    var d=document.getElementById('datePicker').value; localStorage.removeItem('ps_list_'+d);
   }).catch(function(e){toast('등록 실패: '+(e.message||e));}).then(function(){btn.disabled=false;btn.textContent='댓글 등록';});
 };
 document.getElementById('btnCloseComment').onclick=function(){closeOverlay('commentOverlay');};
