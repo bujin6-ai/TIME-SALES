@@ -187,7 +187,7 @@
     <label class="fld">브랜치</label>
     <input type="text" id="cfgBranch" placeholder="main" />
     <label class="fld">액세스 토큰 (등록/수정 시 필요)</label>
-    <input type="password" id="cfgToken" placeholder="github_pat_..." />
+    <input type="password" id="cfgToken" placeholder="github_pat_..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
     <div class="hint">
       토큰은 이 기기에만 저장됩니다(서버 전송 없음). 열람만 할 사람은 토큰 없이도 됩니다(공개 저장소).
       <br>토큰 발급: GitHub → Settings → Developer settings → Fine-grained tokens →
@@ -313,15 +313,26 @@ async function saveConfig() {
   if (!conn.token) { toast("저장하려면 토큰이 필요합니다"); return; }
   const payload = { members: cfg.members, recipients: cfg.recipients };
   if (cfg.tokenEnc) payload.t = cfg.tokenEnc;   // 공유 토큰 유지
+  const url = `${API}/repos/${conn.owner}/${conn.repo}/contents/config.json`;
+  // 저장 직전 최신 sha 확보 (충돌 방지)
+  try {
+    const g = await fetch(`${url}?ref=${conn.branch}&_=${Date.now()}`, { headers: headers(), cache: "no-store" });
+    if (g.ok) { cfgSha = (await g.json()).sha; }
+    else if (g.status === 404) { cfgSha = null; }
+  } catch (e) {}
   const body = {
     message: "설정 업데이트",
     content: utf8ToB64(JSON.stringify(payload, null, 2)),
     branch: conn.branch,
   };
   if (cfgSha) body.sha = cfgSha;
-  const r = await fetch(`${API}/repos/${conn.owner}/${conn.repo}/contents/config.json`,
+  const r = await fetch(url,
     { method: "PUT", headers: headers({ "Content-Type": "application/json" }), body: JSON.stringify(body) });
-  if (!r.ok) { const t = await r.text(); throw new Error("설정 저장 실패: " + t); }
+  if (!r.ok) {
+    let detail = "";
+    try { detail = (await r.json()).message || ""; } catch (e) {}
+    throw new Error("HTTP " + r.status + (detail ? " · " + detail : ""));
+  }
   const j = await r.json(); cfgSha = j.content.sha;
 }
 
@@ -758,13 +769,14 @@ document.getElementById("btnSaveLocal").onclick = async () => {
 };
 
 document.getElementById("btnShareToken").onclick = async () => {
-  const tok = (document.getElementById("cfgToken").value.trim()) || conn.token;
+  // 이미 저장된 정상 토큰을 우선 사용 (비밀번호 자동완성 오염 방지)
+  const tok = conn.token || document.getElementById("cfgToken").value.trim();
   if (!tok) { toast("먼저 토큰을 입력하세요"); return; }
   if (!confirm("주의: 이 앱 주소를 아는 사람은 누구나 사진을 올리거나 삭제할 수 있게 됩니다.\n계속할까요?")) return;
   conn.token = tok;
   cfg.tokenEnc = utf8ToB64(tok);
-  try { await saveConfig(); toast("완료! 이제 모든 기기에서 업로드됩니다."); }
-  catch (e) { toast("실패 — 토큰 권한을 확인하세요"); console.error(e); cfg.tokenEnc = ""; }
+  try { await saveConfig(); alert("완료! 이제 모든 기기에서 업로드됩니다."); }
+  catch (e) { alert("토큰 공유 실패\n\n원인: " + (e.message || e) + "\n\n(이 메시지를 캡쳐해서 알려주세요)"); console.error(e); cfg.tokenEnc = ""; }
 };
 
 document.getElementById("btnAddMember").onclick = () => {
