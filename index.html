@@ -266,6 +266,20 @@ function apiPost(payload){
 function thumbUrl(id){ return 'https://drive.google.com/thumbnail?id='+id+'&sz=w300'; }
 function bigUrl(id){ return 'https://lh3.googleusercontent.com/d/'+id+'=w2048'; }
 function dlUrl(id){ return 'https://drive.google.com/uc?export=download&id='+id; }
+var isMobile=(navigator.maxTouchPoints>0)&&/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent||'');
+// 모바일: 공유 시트로 "이미지(사진) 저장" / PC: 파일 다운로드
+function savePhoto(p){
+  toast('사진 준비 중…');
+  fetch(bigUrl(p.fileId)).then(function(r){return r.blob();}).then(function(blob){
+    var base=(p.uploader?p.uploader+'_':'')+(p.time?String(p.time).replace(/[^0-9]/g,''):Date.now());
+    var file=new File([blob], base+'.jpg', {type:blob.type||'image/jpeg'});
+    if(isMobile && navigator.canShare && navigator.canShare({files:[file]})){
+      navigator.share({files:[file]}).catch(function(){});   // 공유 시트 → 이미지 저장
+    }else{
+      var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download=file.name;document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(url);},4000);
+    }
+  }).catch(function(){ window.open(dlUrl(p.fileId),'_blank'); });
+}
 
 function toast(msg,ms){var t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(function(){t.classList.remove('show');},ms||2500);}
 function todayStr(){var d=new Date();var off=d.getTimezoneOffset();return new Date(d.getTime()-off*60000).toISOString().slice(0,10);}
@@ -316,7 +330,7 @@ function renderPhotos(photos){
     (function(im,fid){ if(!im)return; im.onerror=function(){ if(im._r)return;im._r=1; setTimeout(function(){im.src=thumbUrl(fid)+'&r='+Date.now();},2500); }; })(card.querySelector('.imgwrap img'),p.fileId);
     card.querySelector('.imgwrap').onclick=function(){openViewer(p);};
     card.querySelector('.cmt').onclick=function(){openComments(p);};
-    card.querySelector('.dl').onclick=function(){window.open(dlUrl(p.fileId),'_blank');};
+    card.querySelector('.dl').onclick=function(){savePhoto(p);};
     card.querySelector('.del').onclick=function(){deletePhoto(p);};
   });
 }
@@ -452,7 +466,7 @@ function openViewer(p){
   body.innerHTML='<div class="spin"></div>';
   if(!viewerZoom)viewerZoom=setupViewerZoom();
   document.getElementById('zoomPct').textContent='100%';
-  document.getElementById('btnViewerDownload').onclick=function(){window.open(dlUrl(p.fileId),'_blank');};
+  document.getElementById('btnViewerDownload').onclick=function(){savePhoto(p);};
   v.classList.add('show');
   var img=new Image();img.referrerPolicy='no-referrer';
   img.onload=function(){ body.innerHTML='';body.appendChild(img);viewerZoom.setImg(img); };
