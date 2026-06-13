@@ -101,6 +101,8 @@
   .commentList .cmtHead b{font-size:13px;}
   .commentList .cmtHead span{font-size:11px;color:var(--muted);}
   .commentList .cmtText{font-size:14px;line-height:1.45;word-break:break-word;white-space:pre-wrap;}
+  #analysisOverlay{z-index:70;}
+  .analysisBody{margin-top:6px;background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:14px;font-size:14px;line-height:1.6;white-space:pre-wrap;word-break:break-word;min-height:80px;max-height:48vh;overflow-y:auto;}
   .pastezone{border:1.5px dashed var(--line);border-radius:14px;padding:14px;margin-top:6px;background:var(--card2);}
   .pastezone.drag{border-color:var(--accent);background:#20264a;}
   .pzbtns{display:flex;gap:10px;}
@@ -120,7 +122,7 @@
   /* 뷰어 */
   .viewer{position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:60;display:none;flex-direction:column;}
   .viewer.show{display:flex;}
-  .viewer .vtop{display:flex;align-items:center;gap:8px;padding:10px 12px;padding-top:max(10px,env(safe-area-inset-top));}
+  .viewer .vtop{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 12px;padding-top:max(10px,env(safe-area-inset-top));}
   .viewer .vleft,.viewer .vright{display:flex;align-items:center;gap:8px;}
   .viewer .vleft{margin-right:auto;}
   .viewer .vtop button{background:rgba(255,255,255,.14);color:#fff;border:none;height:40px;min-width:40px;padding:0 12px;border-radius:11px;font-size:15px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;transition:background .15s,transform .1s;}
@@ -221,6 +223,15 @@
   </div>
 </div>
 
+<div class="overlay" id="analysisOverlay">
+  <div class="sheet">
+    <h2>📊 AI 매출 분석</h2>
+    <div class="analysisBody" id="analysisBody"></div>
+    <button class="btn" id="btnReanalyze">다시 분석</button>
+    <button class="btn ghost" id="btnCloseAnalysis">닫기</button>
+  </div>
+</div>
+
 <div class="viewer" id="viewer">
   <div class="vtop">
     <div class="vleft">
@@ -230,6 +241,7 @@
       <button id="btnZoomReset" title="원본 크기">⟲<span class="txt"> 원본</span></button>
     </div>
     <div class="vright">
+      <button id="btnViewerAnalysis" title="AI 매출 분석">📊<span class="txt"> 분석</span></button>
       <button id="btnViewerComment" title="댓글">💬<span class="txt"> 댓글</span></button>
       <button id="btnViewerCopy" title="복사">
         <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
@@ -407,6 +419,8 @@ function doUpload(){
     document.getElementById('status').textContent=dateLabel(date)+' · 사진 '+cur.length+'장';
     // 메일 백그라운드 발송 (사진 인라인 + 앱 링크) — UI는 기다리지 않음
     if(uploaded.length){ apiPost({action:'notify',date:date,uploader:member,memo:memo,fileIds:uploaded.map(function(u){return u.fileId;})}).catch(function(){}); }
+    // AI 매출 분석도 백그라운드로 자동 실행 (보러 들어갈 때쯤 준비됨)
+    uploaded.forEach(function(u){ apiPost({action:'analyze',fileId:u.fileId}).catch(function(){}); });
     setTimeout(render,1500);   // 백그라운드 갱신(서버 반영 확인)
   }
   function next(){
@@ -534,6 +548,26 @@ function copyPhoto(p){
   }).then(function(){ toast('이미지를 복사했어요! Ctrl+V로 붙여넣으세요'); })
   .catch(function(){ toast('복사 실패 — 브라우저가 지원하지 않을 수 있어요'); });
 }
+
+// ---- AI 매출 분석 ----
+function spinnerBox(msg){ return '<div style="text-align:center;color:var(--muted);padding:6px"><div class="spin" style="margin:8px auto"></div>'+msg+'</div>'; }
+function openAnalysis(p){
+  if(!p)return; currentPhoto=p;
+  var box=document.getElementById('analysisBody');
+  if(p.analysis){ box.textContent=p.analysis; }
+  else { runAnalyze(p,false); }
+  openOverlay('analysisOverlay');
+}
+function runAnalyze(p,force){
+  var box=document.getElementById('analysisBody');
+  box.innerHTML=spinnerBox('AI가 매출을 분석 중입니다… (몇 초 걸려요)');
+  apiPost({action:'analyze',fileId:p.fileId,force:!!force}).then(function(r){
+    p.analysis=(r&&r.text)||''; box.textContent=p.analysis||'분석 결과가 없습니다.';
+  }).catch(function(e){ box.textContent='분석 실패: '+(e.message||e)+'\n\n(Code.gs의 Gemini 키 설정/재배포를 확인하세요)'; });
+}
+document.getElementById('btnViewerAnalysis').onclick=function(){openAnalysis(currentPhoto);};
+document.getElementById('btnReanalyze').onclick=function(){ if(currentPhoto) runAnalyze(currentPhoto,true); };
+document.getElementById('btnCloseAnalysis').onclick=function(){closeOverlay('analysisOverlay');};
 
 // ---- 댓글 ----
 function openComments(p){
