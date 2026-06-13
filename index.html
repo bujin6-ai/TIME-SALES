@@ -196,10 +196,13 @@
     <label class="fld">담당자 이름 목록</label>
     <div class="tagrow" id="memberTags"></div>
     <div class="addrow"><input type="text" id="newMember" placeholder="이름 추가" /><button id="btnAddMember">추가</button></div>
-    <label class="fld" style="margin-top:18px;">알림 수신 이메일</label>
+    <label class="fld" style="margin-top:18px;">받는사람 (To) — 받는 사람끼리 주소가 보임</label>
     <div class="tagrow" id="emailTags"></div>
     <div class="addrow"><input type="email" id="newEmail" placeholder="email@example.com" /><button id="btnAddEmail">추가</button></div>
-    <div class="hint">담당자·이메일은 구글시트에 저장되어 모두에게 공유됩니다. 사진이 올라오면 자동으로 알림 메일이 발송돼요.</div>
+    <label class="fld" style="margin-top:18px;">숨은참조 (BCC) — 서로 주소가 안 보임</label>
+    <div class="tagrow" id="bccTags"></div>
+    <div class="addrow"><input type="email" id="newBcc" placeholder="email@example.com" /><button id="btnAddBcc">추가</button></div>
+    <div class="hint">담당자·이메일은 구글시트에 저장되어 모두에게 공유됩니다. 사진이 올라오면 받는사람·숨은참조 모두에게 알림 메일이 발송돼요.</div>
     <button class="btn" id="btnSaveConfig">저장</button>
     <button class="btn ghost" id="btnCloseSettings">닫기</button>
   </div>
@@ -248,7 +251,7 @@ var settingsUnlocked = false;
 
 var DL_SVG = "<svg viewBox='0 0 24 24' width='15' height='15' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 3v11'/><path d='M8 11l4 4 4-4'/><path d='M5 20h14'/></svg>";
 
-var cfg = { members: [], recipients: [] };
+var cfg = { members: [], recipients: [], bcc: [] };
 var pendingFiles = [];
 var currentPhoto = null;
 var badgeByFileId = {};
@@ -293,7 +296,7 @@ function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
 
 // ---- 설정 ----
 function loadConfig(){
-  return apiGet({action:'config'}).then(function(c){ cfg.members=c.members||[]; cfg.recipients=c.recipients||[]; lsSet('ps_config',cfg); });
+  return apiGet({action:'config'}).then(function(c){ cfg.members=c.members||[]; cfg.recipients=c.recipients||[]; cfg.bcc=c.bcc||[]; lsSet('ps_config',cfg); });
 }
 function fillMemberSelect(){
   var sel=document.getElementById('upMember');
@@ -301,11 +304,14 @@ function fillMemberSelect(){
   var saved=localStorage.getItem('ps_member');
   if(saved&&cfg.members.indexOf(saved)>=0) sel.value=saved;   // 기기별 담당자 기억
 }
+function renderTagList(id,arr){
+  var box=document.getElementById(id);box.innerHTML='';
+  arr.forEach(function(m,idx){var el=document.createElement('div');el.className='tag';el.innerHTML='<b>'+escapeHtml(m)+'</b> <span class="x">✕</span>';el.querySelector('.x').onclick=function(){arr.splice(idx,1);renderTags();};box.appendChild(el);});
+}
 function renderTags(){
-  var mt=document.getElementById('memberTags');mt.innerHTML='';
-  cfg.members.forEach(function(m,idx){var el=document.createElement('div');el.className='tag';el.innerHTML='<b>'+escapeHtml(m)+'</b> <span class="x">✕</span>';el.querySelector('.x').onclick=function(){cfg.members.splice(idx,1);renderTags();};mt.appendChild(el);});
-  var et=document.getElementById('emailTags');et.innerHTML='';
-  cfg.recipients.forEach(function(m,idx){var el=document.createElement('div');el.className='tag';el.innerHTML='<b>'+escapeHtml(m)+'</b> <span class="x">✕</span>';el.querySelector('.x').onclick=function(){cfg.recipients.splice(idx,1);renderTags();};et.appendChild(el);});
+  renderTagList('memberTags',cfg.members);
+  renderTagList('emailTags',cfg.recipients);
+  renderTagList('bccTags',cfg.bcc);
 }
 
 // ---- 목록 ----
@@ -562,9 +568,11 @@ document.getElementById('btnAddMember').onclick=function(){var v=document.getEle
 document.getElementById('newMember').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('btnAddMember').click();});
 document.getElementById('btnAddEmail').onclick=function(){var v=document.getElementById('newEmail').value.trim();if(v&&/\S+@\S+\.\S+/.test(v)&&cfg.recipients.indexOf(v)<0)cfg.recipients.push(v);else if(v){toast('이메일 형식을 확인하세요');return;}document.getElementById('newEmail').value='';renderTags();};
 document.getElementById('newEmail').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('btnAddEmail').click();});
+document.getElementById('btnAddBcc').onclick=function(){var v=document.getElementById('newBcc').value.trim();if(v&&/\S+@\S+\.\S+/.test(v)&&cfg.bcc.indexOf(v)<0)cfg.bcc.push(v);else if(v){toast('이메일 형식을 확인하세요');return;}document.getElementById('newBcc').value='';renderTags();};
+document.getElementById('newBcc').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('btnAddBcc').click();});
 document.getElementById('btnSaveConfig').onclick=function(){
-  apiPost({action:'saveConfig',pw:window._pw||SETTINGS_PW,members:cfg.members,recipients:cfg.recipients})
-    .then(function(c){cfg.members=c.members;cfg.recipients=c.recipients;lsSet('ps_config',cfg);fillMemberSelect();toast('저장 완료 (모두에게 공유됨)');})
+  apiPost({action:'saveConfig',pw:window._pw||SETTINGS_PW,members:cfg.members,recipients:cfg.recipients,bcc:cfg.bcc})
+    .then(function(c){cfg.members=c.members;cfg.recipients=c.recipients;cfg.bcc=c.bcc||[];lsSet('ps_config',cfg);fillMemberSelect();toast('저장 완료 (모두에게 공유됨)');})
     .catch(function(e){toast('저장 실패: '+(e.message||e));});
 };
 
