@@ -356,17 +356,48 @@ function renderPhotos(photos){
     card.querySelector('.del').onclick=function(){deletePhoto(p);};
   });
 }
+// ---- 빠른 목록: 사진 목록 시트(photos)를 직접 읽음 (Apps Script보다 3~4배 빠름) ----
+var PHOTO_SHEET_ID='1klqD3EQAM1yUR69V3WjrgM1oJFnUbUjifc00hEIa2U4';
+function fastList(date){
+  var tq="select B,C,D,E,G where A = date '"+date+"' order by G";
+  var url='https://docs.google.com/spreadsheets/d/'+PHOTO_SHEET_ID+'/gviz/tq?tqx=out:json&sheet=photos&tq='+encodeURIComponent(tq)+'&_='+Date.now();
+  return fetch(url,{cache:'no-store'}).then(function(r){return r.text();}).then(function(t){
+    var j=JSON.parse(t.slice(t.indexOf('{'),t.lastIndexOf('}')+1));
+    if(j.status!=='ok') throw new Error('fast list');
+    return j.table.rows.map(function(r){
+      var c=r.c; function v(i){return c[i]?(c[i].f!=null?c[i].f:c[i].v):'';}
+      return {time:v(0),uploader:v(1),memo:v(2),fileId:c[3]&&c[3].v,ts:c[4]&&c[4].v,comments:0,cmts:[],analysis:''};
+    }).filter(function(p){return p.fileId;});
+  });
+}
+function listSig(ps){ return (ps||[]).map(function(p){return p.fileId+':'+(p.comments||0);}).join(','); }
 function render(){
   var status=document.getElementById('status');
   if(!apiReady()){ status.textContent='⚠️ 설정 필요: API_URL에 Apps Script 주소를 넣으세요.'; document.getElementById('grid').innerHTML=''; return; }
   var date=document.getElementById('datePicker').value;
   var cached=lsGet('ps_list_'+date);
-  if(cached){ renderPhotos(cached); status.textContent=dateLabel(date)+' · 사진 '+cached.length+'장'; }   // 캐시 즉시 표시
-  else { status.textContent='불러오는 중…'; document.getElementById('grid').innerHTML='<div class="empty"><div class="spin" style="margin:0 auto"></div></div>'; }
-  apiGet({action:'list',date:date}).then(function(photos){
-    lsSet('ps_list_'+date,photos);
-    renderPhotos(photos);
+  var shown=cached?listSig(cached):null, serverDone=false;
+  function show(photos){
+    if(document.getElementById('datePicker').value!==date) return;   // 그사이 날짜를 바꿨으면 무시
     status.textContent=dateLabel(date)+' · 사진 '+photos.length+'장';
+    var s=listSig(photos); if(s===shown) return;                       // 같으면 다시 그리지 않음(깜빡임 방지)
+    shown=s; renderPhotos(photos);
+  }
+  if(cached){ renderPhotos(cached); status.textContent=dateLabel(date)+' · 사진 '+cached.length+'장 · 최신 확인 중…'; }   // 캐시 즉시 표시
+  else { status.textContent='불러오는 중…'; document.getElementById('grid').innerHTML='<div class="empty"><div class="spin" style="margin:0 auto"></div></div>'; }
+  // 1) 빠른 목록 먼저 (약 0.7초) — 댓글 수는 캐시 값 유지
+  fastList(date).then(function(photos){
+    if(serverDone) return;
+    var prev={}; (cached||[]).forEach(function(p){prev[p.fileId]=p;});
+    photos.forEach(function(p){var o=prev[p.fileId]; if(o){p.comments=o.comments||0;p.cmts=o.cmts||[];p.analysis=o.analysis||'';}});
+    lsSet('ps_list_'+date,photos);
+    show(photos);
+  }).catch(function(){});
+  // 2) 서버 목록 (댓글 수·분석 포함, 3~4초) — 도착하면 최종 반영
+  apiGet({action:'list',date:date}).then(function(photos){
+    serverDone=true;
+    lsSet('ps_list_'+date,photos);
+    show(photos);
   }).catch(function(e){ if(!cached) status.textContent='⚠️ '+(e.message||e); });
 }
 
