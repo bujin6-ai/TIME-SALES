@@ -697,6 +697,24 @@ document.getElementById('btnTheme').onclick=function(){ applyTheme(document.docu
 var cc=lsGet('ps_config'); if(cc){cfg=cc;fillMemberSelect();}
 render();
 loadConfig().then(fillMemberSelect).catch(function(){});
+
+// ---- 자동 새로고침: 보고 있는 동안 30초마다, 앱/탭으로 돌아오면 즉시 새 사진 확인 ----
+function idsOf(ps){ return (ps||[]).map(function(p){return p.fileId;}).join(','); }
+var quickBusy=false;
+function quickCheck(){
+  if(document.hidden||quickBusy||!apiReady()) return;
+  var date=document.getElementById('datePicker').value;
+  quickBusy=true;
+  fastList(date).then(function(photos){
+    quickBusy=false;
+    if(document.getElementById('datePicker').value!==date) return;
+    if(idsOf(photos)!==idsOf(lsGet('ps_list_'+date))) render();   // 새 사진/삭제가 있으면 목록 갱신
+  }).catch(function(){ quickBusy=false; });
+}
+setInterval(quickCheck, 30000);
+document.addEventListener('visibilitychange', function(){ if(!document.hidden) quickCheck(); });
+window.addEventListener('focus', quickCheck);
+window.addEventListener('pageshow', function(e){ if(e.persisted) render(); });   // 뒤로가기 캐시로 돌아온 경우
 </script>
 </body>
 </html>
