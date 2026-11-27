@@ -608,6 +608,25 @@ document.getElementById('btnViewerClose').onclick=function(){document.getElement
 document.getElementById('btnViewerPrev').onclick=function(){viewerStep(-1);};
 document.getElementById('btnViewerNext').onclick=function(){viewerStep(1);};
 document.addEventListener('keydown',function(e){ if(!document.getElementById('viewer').classList.contains('show'))return; if(e.key==='ArrowLeft')viewerStep(-1); else if(e.key==='ArrowRight')viewerStep(1); else if(e.key==='Escape')document.getElementById('viewer').classList.remove('show'); });
+// 모바일: 확대하지 않은 상태에서 좌우로 밀면 이전/다음 사진 (확대 중에는 기존처럼 사진 이동)
+(function(){
+  var vb=document.getElementById('viewerBody'), sw=null;
+  vb.addEventListener('pointerdown',function(e){
+    if(!viewerGroup) return;
+    if(sw){ sw.multi=true; return; }                              // 두 손가락 = 확대 동작 → 넘기기 아님
+    sw={id:e.pointerId,x:e.clientX,y:e.clientY,t:Date.now(),multi:false};
+  });
+  function end(e){
+    if(!sw) return;
+    var s=sw; if(e.pointerId!==s.id){ s.multi=true; return; }
+    sw=null;
+    if(s.multi || (viewerZoom && viewerZoom.scale>1.01)) return;
+    var dx=e.clientX-s.x, dy=e.clientY-s.y;
+    if(Math.abs(dx)>50 && Math.abs(dx)>Math.abs(dy)*1.5 && Date.now()-s.t<800) viewerStep(dx<0?1:-1);   // 왼쪽으로 밀면 다음
+  }
+  vb.addEventListener('pointerup',end);
+  vb.addEventListener('pointercancel',function(){ sw=null; });
+})();
 document.getElementById('btnZoomIn').onclick=function(){viewerZoom&&viewerZoom.zoomBtn(1.4);};
 document.getElementById('btnZoomOut').onclick=function(){viewerZoom&&viewerZoom.zoomBtn(1/1.4);};
 document.getElementById('btnZoomReset').onclick=function(){viewerZoom&&viewerZoom.reset();};
